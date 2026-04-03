@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
+import cors from "cors";
 
 dotenv.config();
 
@@ -13,6 +14,8 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  app.set('trust proxy', 1);
+  app.use(cors());
   app.use(express.json());
 
   // Mock database for demonstration if Supabase isn't configured yet
