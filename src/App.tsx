@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   X,
   Languages,
-  Copy
+  Copy,
+  Link
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -385,6 +386,7 @@ function AppContent() {
   const [exchangeTo, setExchangeTo] = useState('PI');
   const [exchangeAmount, setExchangeAmount] = useState<number>(0);
   const [txCurrency, setTxCurrency] = useState('PI');
+  const [connectedExchanges, setConnectedExchanges] = useState<string[]>(['Binance', 'MetaMask']);
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -404,16 +406,16 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق' },
-    fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié' },
-    es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado' },
-    kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel' },
-    ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨' },
-    zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证' },
-    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み' },
-    it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato' },
-    pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado' }
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري' },
+    fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles Connectés', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané' },
+    es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras Conectados', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo' },
+    kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin yettuseqlen', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren' },
+    ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨', connectedExchanges: '연결된 거래소 및 지갑', globalConnectivity: '글로벌 연결성', connected: '연결됨', disconnected: '연결 끊김', networkStatus: '네트워크 상태', mainnetSettlement: '메인넷 결제', instant: '즉시' },
+    zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证', connectedExchanges: '已连接的交易所和钱包', globalConnectivity: '全球连接', connected: '已连接', disconnected: '未连接', networkStatus: '网络状态', mainnetSettlement: '主网结算', instant: '即时' },
+    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み', connectedExchanges: '接続された取引所とウォレット', globalConnectivity: 'グローバル接続', connected: '接続済み', disconnected: '未接続', networkStatus: 'ネットワークステータス', mainnetSettlement: 'メインネット決済', instant: '即時' },
+    it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato', connectedExchanges: 'Scambi e Portafogli Collegati', globalConnectivity: 'Connettività Globale', connected: 'Collegato', disconnected: 'Scollegato', networkStatus: 'Stato della Rete', mainnetSettlement: 'Regolamento Mainnet', instant: 'Istantaneo' },
+    pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado', connectedExchanges: 'Exchanges e Carteiras Conectadas', globalConnectivity: 'Conectividade Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Status da Rede', mainnetSettlement: 'Liquidação Mainnet', instant: 'Instantâneo' }
   }[lang];
 
   const handleCopyUid = () => {
@@ -1006,21 +1008,73 @@ function AppContent() {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">External Wallet</p>
-                    <p className="font-bold text-sm">Binance / MetaMask</p>
-                    <div className="mt-4 flex items-center space-x-2 text-emerald-500 text-xs">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Connected</span>
-                    </div>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center px-1">
+                    <h3 className="text-lg font-bold flex items-center space-x-2">
+                      <Link className="w-5 h-5 text-amber-500" />
+                      <span>{t.connectedExchanges}</span>
+                    </h3>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase">{t.globalConnectivity}</span>
                   </div>
-                  <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Network Fee</p>
-                    <p className="font-bold text-sm">0.0001 π</p>
-                    <div className="mt-4 flex items-center space-x-2 text-slate-500 text-xs">
+                  
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { name: 'Binance', icon: 'B' },
+                      { name: 'Coinbase', icon: 'C' },
+                      { name: 'Kraken', icon: 'K' },
+                      { name: 'OKX', icon: 'O' },
+                      { name: 'KuCoin', icon: 'K' },
+                      { name: 'Bybit', icon: 'B' },
+                      { name: 'Gate.io', icon: 'G' },
+                      { name: 'HTX', icon: 'H' },
+                      { name: 'MEXC', icon: 'M' },
+                      { name: 'Bitget', icon: 'B' },
+                      { name: 'Crypto.com', icon: 'C' },
+                      { name: 'MetaMask', icon: 'M' },
+                      { name: 'Trust Wallet', icon: 'T' },
+                      { name: 'Phantom', icon: 'P' }
+                    ].map((exchange) => {
+                      const isConnected = connectedExchanges.includes(exchange.name);
+                      return (
+                        <motion.button 
+                          key={exchange.name}
+                          whileHover={{ y: -2 }}
+                          onClick={() => {
+                            if (!isConnected) {
+                              setConnectedExchanges([...connectedExchanges, exchange.name]);
+                            } else {
+                              setConnectedExchanges(connectedExchanges.filter(e => e !== exchange.name));
+                            }
+                          }}
+                          className={`p-4 rounded-2xl border transition-all flex flex-col items-center space-y-2 ${
+                            isConnected 
+                              ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' 
+                              : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:border-slate-700'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
+                            isConnected ? 'bg-amber-500 text-slate-950' : 'bg-slate-800'
+                          }`}>
+                            {exchange.icon}
+                          </div>
+                          <span className="text-[10px] font-bold uppercase truncate w-full text-center">{exchange.name}</span>
+                          <div className="flex items-center space-x-1">
+                            <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
+                            <span className="text-[8px] font-bold uppercase">{isConnected ? t.connected : t.disconnected}</span>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">{t.networkStatus}</p>
+                  <div className="flex justify-between items-center">
+                    <p className="font-bold text-sm">{t.mainnetSettlement}</p>
+                    <div className="flex items-center space-x-2 text-emerald-500 text-xs">
                       <Zap className="w-4 h-4" />
-                      <span>Instant Settlement</span>
+                      <span>{t.instant}</span>
                     </div>
                   </div>
                 </div>
