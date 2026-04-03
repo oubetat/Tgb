@@ -75,7 +75,24 @@ import {
 const PI_FIXED_PRICE = 314159;
 
 const useBinancePrices = () => {
-  const [prices, setPrices] = useState<{ [symbol: string]: number }>({ PI: PI_FIXED_PRICE, USD: 1, DZD: 0.0074 });
+  const [prices, setPrices] = useState<{ [symbol: string]: number }>({ 
+    PI: PI_FIXED_PRICE, 
+    USD: 1, 
+    DZD: 0.0074,
+    BTC: 65000,
+    ETH: 3500,
+    BNB: 580,
+    SOL: 145,
+    XRP: 0.62,
+    ADA: 0.45,
+    DOGE: 0.16,
+    AVAX: 35,
+    DOT: 7.2,
+    LINK: 18,
+    MATIC: 0.72,
+    LTC: 85,
+    BCH: 450
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -83,7 +100,24 @@ const useBinancePrices = () => {
       try {
         const response = await fetch('https://api.binance.com/api/v3/ticker/price');
         const data = await response.json();
-        const newPrices: { [symbol: string]: number } = { PI: PI_FIXED_PRICE, USD: 1, DZD: 0.0074 };
+        const newPrices: { [symbol: string]: number } = { 
+          PI: PI_FIXED_PRICE, 
+          USD: 1, 
+          DZD: 0.0074,
+          BTC: 65000,
+          ETH: 3500,
+          BNB: 580,
+          SOL: 145,
+          XRP: 0.62,
+          ADA: 0.45,
+          DOGE: 0.16,
+          AVAX: 35,
+          DOT: 7.2,
+          LINK: 18,
+          MATIC: 0.72,
+          LTC: 85,
+          BCH: 450
+        };
         
         // Map Binance prices (symbol like BTCUSDT) to our symbols
         data.forEach((item: any) => {
@@ -412,10 +446,12 @@ function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | null>(null);
+  const [notification, setNotification] = useState<{ title: string; message: string }>({ title: '', message: '' });
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>('en');
+  const isRTL = lang === 'ar';
   const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange' | 'finance'>('wallet');
   const [copySuccess, setCopySuccess] = useState(false);
   const [exchangeFrom, setExchangeFrom] = useState('USD');
@@ -455,16 +491,16 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض' },
-    fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles Connectés', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané' },
-    es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras Conectados', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo' },
-    kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin yettuseqlen', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren' },
-    ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨', connectedExchanges: '연결된 거래소 및 지갑', globalConnectivity: '글로벌 연결성', connected: '연결됨', disconnected: '연결 끊김', networkStatus: '네트워크 상태', mainnetSettlement: '메인넷 결제', instant: '즉시' },
-    zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证', connectedExchanges: '已连接的交易所和钱包', globalConnectivity: '全球连接', connected: '已连接', disconnected: '未连接', networkStatus: '网络状态', mainnetSettlement: '主网结算', instant: '即时' },
-    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み', connectedExchanges: '接続された取引所とウォレット', globalConnectivity: 'グローバル接続', connected: '接続済み', disconnected: '未接続', networkStatus: 'ネットワークステータス', mainnetSettlement: 'メインネット決済', instant: '即時' },
-    it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato', connectedExchanges: 'Scambi e Portafogli Collegati', globalConnectivity: 'Connettività Globale', connected: 'Collegato', disconnected: 'Scollegato', networkStatus: 'Stato della Rete', mainnetSettlement: 'Regolamento Mainnet', instant: 'Istantaneo' },
-    pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado', connectedExchanges: 'Exchanges e Carteiras Conectadas', globalConnectivity: 'Conectividade Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Status da Rede', mainnetSettlement: 'Liquidação Mainnet', instant: 'Instantâneo' }
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة' },
+    fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané', finance: 'Finance', lending: 'Prêt P2P', pools: 'Pools d\'Investissement', vault: 'Coffre Personnel', partnership: 'Partenariat Commercial', scanQr: 'Scanner QR', metrics: 'Métriques Globales Pi', totalSupply: 'Offre Totale', circulatingSupply: 'Offre Circulante', lockedSupply: 'Offre Verrouillée', activeCountries: 'Pays Actifs', connectedBanks: 'Banques Connectées', exchangeRates: 'Taux de Change Globaux', remittance: 'Remise Globale', gcvValue: 'Valeur de Consensus (GCV)', createLending: 'Créer une Demande de Prêt', loanAmount: 'Montant du Prêt (π)', loanApr: 'Taux d\'Intérêt (APR %)', loanPurpose: 'But du Prêt', addBank: 'Ajouter une Banque Globale', executeLoan: 'Exécuter le Prêt', joinPool: 'Rejoindre le Groupe', stakePi: 'Staker Pi pour Boost Rank', submitProposal: 'Soumettre une Proposition', comingSoon: 'Fonctionnalité Bientôt', copy: 'Copier', copied: 'Copié', logout: 'Déconnexion', settings: 'Paramètres', privacy: 'Confidentialité', language: 'Langue' },
+    es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo', finance: 'Finanzas', lending: 'Préstamos P2P', pools: 'Fondos de Inversión', vault: 'Bóveda Personal', partnership: 'Asociación Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suministro Total', circulatingSupply: 'Suministro Circulante', lockedSupply: 'Suministro Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Tasas de Cambio Globales', remittance: 'Remesas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Crear Solicitud de Préstamo', loanAmount: 'Monto del Préstamo (π)', loanApr: 'Tasa de Interés (APR %)', loanPurpose: 'Propósito del Préstamo', addBank: 'Agregar Banco Global', executeLoan: 'Ejecutar Préstamo', joinPool: 'Unirse al Grupo', stakePi: 'Staker Pi para Subir Rango', submitProposal: 'Enviar Propuesta', comingSoon: 'Próximamente', copy: 'Copiar', copied: 'Copiado', logout: 'Cerrar Sesión', settings: 'Ajustes', privacy: 'Privacidad', language: 'Idioma' },
+    kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt' },
+    ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: 'KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨', connectedExchanges: '연결된 거래소', globalConnectivity: '글로벌 연결성', connected: '연결됨', disconnected: '연결 끊김', networkStatus: '네트워크 상태', mainnetSettlement: '메인넷 결제', instant: '즉시', finance: '금융', lending: 'P2P 대출', pools: '투자 풀', vault: '개인 금고', partnership: '비즈니스 파트너십', scanQr: 'QR 스캔', metrics: '글로벌 Pi 지표', totalSupply: '총 공급량', circulatingSupply: '유통 공급량', lockedSupply: '잠긴 공급량', activeCountries: '활성 국가', connectedBanks: '연결된 은행', exchangeRates: '글로벌 환율', remittance: '글로벌 송금', gcvValue: '합의 가치 (GCV)', createLending: '대출 요청 생성', loanAmount: '대출 금액 (π)', loanApr: '이자율 (APR %)', loanPurpose: '대출 목적', addBank: '글로벌 은행 추가', executeLoan: '대출 실행', joinPool: '그룹 가입', stakePi: 'Pi 스테이킹', submitProposal: '제안서 제출', comingSoon: '곧 출시 예정', copy: '복사', copied: '복사됨', logout: '로그아웃', settings: '설정', privacy: '개인정보 보호', language: '언어' },
+    zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证', connectedExchanges: '已连接的交易所', globalConnectivity: '全球连接', connected: '已连接', disconnected: '未连接', networkStatus: '网络状态', mainnetSettlement: '主网结算', instant: '即时', finance: '金融', lending: 'P2P 借贷', pools: '投资池', vault: '个人金库', partnership: '商务合作', scanQr: '扫描二维码', metrics: '全球 Pi 指标', totalSupply: '总供应量', circulatingSupply: '流通供应量', lockedSupply: '锁定供应量', activeCountries: '活跃国家', connectedBanks: '连接的银行', exchangeRates: '全球汇率', remittance: '全球汇款', gcvValue: '共识价值 (GCV)', createLending: '创建借贷请求', loanAmount: '借贷金额 (π)', loanApr: '利率 (APR %)', loanPurpose: '借贷用途', addBank: '添加全球银行', executeLoan: '执行借贷', joinPool: '加入小组', stakePi: '质押 Pi 提升排名', submitProposal: '提交商业提案', comingSoon: '即将推出', copy: '复制', copied: '已复制', logout: '退出登录', settings: '设置', privacy: '隐私与安全', language: '语言' },
+    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'KYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み', connectedExchanges: '接続された取引所', globalConnectivity: 'グローバル接続', connected: '接続済み', disconnected: '未接続', networkStatus: 'ネットワークステータス', mainnetSettlement: 'メインネット決済', instant: '即時', finance: '金融', lending: 'P2Pレンディング', pools: '投資プール', vault: '個人用金庫', partnership: 'ビジネスパートナーシップ', scanQr: 'QRスキャン', metrics: 'グローバルPi指標', totalSupply: '総供給量', circulatingSupply: '循環供給量', lockedSupply: 'ロックされた供給量', activeCountries: '活動国', connectedBanks: '接続された銀行', exchangeRates: 'グローバル為替レート', remittance: 'グローバル送金', gcvValue: 'コンセンサス価値 (GCV)', createLending: '貸付リクエストを作成', loanAmount: '貸付金額 (π)', loanApr: '利率 (APR %)', loanPurpose: '貸付目的', addBank: 'グローバル銀行を追加', executeLoan: '貸付を実行', joinPool: 'グループに参加', stakePi: 'Piをステーキング', submitProposal: '提案を提出', comingSoon: '近日公開', copy: 'コピー', copied: 'コピー済み', logout: 'ログアウト', settings: '設定', privacy: 'プライバシー', language: '言語' },
+    it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato', connectedExchanges: 'Scambi Collegati', globalConnectivity: 'Connettività Globale', connected: 'Collegato', disconnected: 'Scollegato', networkStatus: 'Stato della Rete', mainnetSettlement: 'Regolamento Mainnet', instant: 'Istantaneo', finance: 'Finanza', lending: 'Prestiti P2P', pools: 'Pool di Investimento', vault: 'Caveau Personale', partnership: 'Partnership Commerciale', scanQr: 'Scansiona QR', metrics: 'Metriche Globali Pi', totalSupply: 'Fornitura Totale', circulatingSupply: 'Fornitura Circolante', lockedSupply: 'Fornitura Bloccata', activeCountries: 'Paesi Attivi', connectedBanks: 'Banche Collegate', exchangeRates: 'Tassi di Cambio Globali', remittance: 'Rimesse Globali', gcvValue: 'Valore di Consenso (GCV)', createLending: 'Crea Richiesta di Prestito', loanAmount: 'Importo del Prestito (π)', loanApr: 'Tasso di Interesse (APR %)', loanPurpose: 'Scopo del Prestito', addBank: 'Aggiungi Banca Globale', executeLoan: 'Esegui Prestito', joinPool: 'Unisciti al Gruppo', stakePi: 'Metti in Stake Pi', submitProposal: 'Invia Proposta', comingSoon: 'Prossimamente', copy: 'Copia', copied: 'Copiato', logout: 'Esci', settings: 'Impostazioni', privacy: 'Privacy', language: 'Lingua' },
+    pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Actividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário', kycPending: 'KYC pendente', kycVerified: 'KYC verificado', connectedExchanges: 'Exchanges Conectadas', globalConnectivity: 'Conectividade Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Status da Rede', mainnetSettlement: 'Liquidação Mainnet', instant: 'Instantâneo', finance: 'Finanças', lending: 'Empréstimos P2P', pools: 'Pools de Investimento', vault: 'Cofre Pessoal', partnership: 'Parceria Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suprimento Total', circulatingSupply: 'Suprimento Circulante', lockedSupply: 'Suprimento Bloqueado', activeCountries: 'Países Ativos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Taxas de Câmbio Globais', remittance: 'Remessas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Criar Pedido de Empréstimo', loanAmount: 'Valor do Empréstimo (π)', loanApr: 'Taxa de Juros (APR %)', loanPurpose: 'Objetivo do Empréstimo', addBank: 'Adicionar Banco Global', executeLoan: 'Executar Empréstimo', joinPool: 'Participar do Grupo', stakePi: 'Stake Pi para Subir Rank', submitProposal: 'Enviar Proposta', comingSoon: 'Em breve', copy: 'Copiar', copied: 'Copiado', logout: 'Sair', settings: 'Configurações', privacy: 'Privacidade', language: 'Idioma' }
   }[lang];
 
   const handleCopyUid = () => {
@@ -599,7 +635,8 @@ function AppContent() {
   const handleExecuteLoan = async (loanId: string, amount: number) => {
     if (!user || !wallet) return;
     if ((wallet.balances['PI'] || 0) < amount) {
-      alert("Insufficient PI balance to fund this loan");
+      setNotification({ title: 'Error', message: "Insufficient PI balance to fund this loan" });
+      setActiveModal('notification');
       return;
     }
 
@@ -622,12 +659,32 @@ function AppContent() {
       });
 
       setTxSuccess(true);
-      setTimeout(() => setTxSuccess(false), 2000);
+      setActiveModal('lending'); // Open modal to show success
+      setTimeout(() => {
+        setTxSuccess(false);
+        setActiveModal(null);
+      }, 2000);
     } catch (e: any) {
-      alert(e.message);
+      setNotification({ title: 'Error', message: e.message });
+      setActiveModal('notification');
     } finally {
       setTxLoading(false);
     }
+  };
+
+  const handleJoinPool = async (poolId: string) => {
+    setNotification({ title: t.pools, message: `${t.comingSoon}: Joining Pool ${poolId}` });
+    setActiveModal('notification');
+  };
+
+  const handleAddBank = () => {
+    setNotification({ title: t.addBank, message: `${t.comingSoon}: Global Bank Integration` });
+    setActiveModal('notification');
+  };
+
+  const handleStakePi = () => {
+    setNotification({ title: t.vault, message: `${t.comingSoon}: Pi Staking Vault` });
+    setActiveModal('notification');
   };
 
   const handleRequestCard = async () => {
@@ -797,7 +854,7 @@ function AppContent() {
   }, 0);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white font-sans pb-24">
+    <div className="min-h-screen bg-slate-950 text-white font-sans pb-24" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {/* Header */}
       <header className="p-6 flex justify-between items-center bg-slate-900/50 backdrop-blur-md sticky top-0 z-10 border-b border-slate-800">
         <div className="flex items-center space-x-2">
@@ -966,52 +1023,66 @@ function AppContent() {
         )}
 
         {activeTab === 'market' && (
-          <section className="space-y-6">
+          <section className="space-y-6 pb-20">
             <h2 className="text-2xl font-bold">{t.market}</h2>
-            <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Pi Value Trend</span></h3>
-                <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg">+0.05%</span>
-              </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorValue)" strokeWidth={3} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px' }} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
             
-            <div className="space-y-4">
-              <h3 className="text-lg font-bold">Top Cryptocurrencies</h3>
-              <div className="grid grid-cols-1 gap-3">
-                {Object.entries(prices)
-                  .sort((a, b) => Number(b[1]) - Number(a[1]))
-                  .slice(0, 15)
-                  .map(([symbol, price]) => (
-                  <div key={symbol} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex justify-between items-center">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-400 text-sm">{symbol[0]}</div>
-                      <div>
-                        <p className="font-bold">{symbol}</p>
-                        <p className="text-[10px] text-slate-500 uppercase">{symbol === 'PI' ? 'Consensus Value' : 'Market Price'}</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-black text-emerald-500">${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <p className="text-[10px] text-slate-500 uppercase">24h Vol: High</p>
-                    </div>
-                  </div>
-                ))}
+            {pricesLoading ? (
+              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                <Loader2 className="w-10 h-10 text-amber-500 animate-spin" />
+                <p className="text-slate-500 font-bold animate-pulse">Fetching Live Market Data...</p>
               </div>
-            </div>
+            ) : (
+              <>
+                <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                  <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Pi Value Trend</span></h3>
+                    <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg">+0.05%</span>
+                  </div>
+                  <div className="h-64 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={chartData}>
+                        <defs>
+                          <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorValue)" strokeWidth={3} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px' }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <h3 className="text-lg font-bold">Top Cryptocurrencies</h3>
+                  <div className="grid grid-cols-1 gap-3">
+                    {Object.entries(prices).length > 0 ? (
+                      Object.entries(prices)
+                        .sort((a, b) => Number(b[1]) - Number(a[1]))
+                        .slice(0, 15)
+                        .map(([symbol, price]) => (
+                        <div key={symbol} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex justify-between items-center">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-400 text-sm">{symbol[0]}</div>
+                            <div>
+                              <p className="font-bold">{symbol}</p>
+                              <p className="text-[10px] text-slate-500 uppercase">{symbol === 'PI' ? 'Consensus Value' : 'Market Price'}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-emerald-500">${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                            <p className="text-[10px] text-slate-500 uppercase">24h Vol: High</p>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-10 text-slate-500 italic">No market data available</div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </section>
         )}
 
@@ -1123,9 +1194,12 @@ function AppContent() {
                     </div>
                   </div>
                 ))}
-                <button className="w-full py-4 border-2 border-dashed border-slate-800 rounded-3xl text-slate-500 font-bold hover:border-amber-500/50 hover:text-amber-500 transition-all flex items-center justify-center space-x-2">
+                <button 
+                  onClick={handleAddBank}
+                  className="w-full py-4 border-2 border-dashed border-slate-800 rounded-3xl text-slate-500 font-bold hover:border-amber-500/50 hover:text-amber-500 transition-all flex items-center justify-center space-x-2"
+                >
                   <Plus className="w-5 h-5" />
-                  <span>Add Global Bank</span>
+                  <span>{t.addBank}</span>
                 </button>
               </div>
             </div>
@@ -1158,7 +1232,7 @@ function AppContent() {
                       disabled={txLoading}
                       className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all text-sm disabled:opacity-50"
                     >
-                      {txLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Execute Loan"}
+                      {txLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : t.executeLoan}
                     </button>
                   </div>
                 ))}
@@ -1189,8 +1263,11 @@ function AppContent() {
                       <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
                         <div className="h-full bg-amber-500" style={{ width: `${(pool.totalInvested / pool.target) * 100}%` }} />
                       </div>
-                      <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all">
-                        Join Group
+                      <button 
+                        onClick={() => handleJoinPool(pool.id)}
+                        className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all"
+                      >
+                        {t.joinPool}
                       </button>
                     </div>
                   </div>
@@ -1211,8 +1288,11 @@ function AppContent() {
                 <p className="text-[10px] font-black uppercase mb-1">Current Staked</p>
                 <p className="text-2xl font-black">3,128,929.56 π</p>
               </div>
-              <button className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl hover:bg-slate-900 transition-all">
-                Stake Pi to Boost Rank
+              <button 
+                onClick={handleStakePi}
+                className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl hover:bg-slate-900 transition-all"
+              >
+                {t.stakePi}
               </button>
             </div>
 
@@ -1227,8 +1307,11 @@ function AppContent() {
                   <p className="text-xs text-slate-500">Collaborate with TrustBank Global</p>
                 </div>
               </div>
-              <button className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm">
-                Submit Business Proposal
+              <button 
+                onClick={() => setActiveModal('partnership')}
+                className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm"
+              >
+                {t.submitProposal}
               </button>
             </div>
           </section>
@@ -1524,9 +1607,18 @@ function AppContent() {
                         <button 
                           key={l}
                           onClick={() => setLang(l as any)}
-                          className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase border transition-all ${lang === l ? 'bg-amber-500 border-amber-500 text-slate-950' : 'border-slate-800 text-slate-500'}`}
+                          className={`px-4 py-2 rounded-xl text-xs font-bold uppercase border transition-all ${lang === l ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}
                         >
-                          {l}
+                          {l === 'en' ? 'English' : 
+                           l === 'ar' ? 'العربية' : 
+                           l === 'fr' ? 'Français' : 
+                           l === 'es' ? 'Español' : 
+                           l === 'kab' ? 'Taqbaylit' : 
+                           l === 'ko' ? '한국어' : 
+                           l === 'zh' ? '中文' : 
+                           l === 'ja' ? '日本語' : 
+                           l === 'it' ? 'Italiano' : 
+                           l === 'pt' ? 'Português' : l}
                         </button>
                       ))}
                     </div>
@@ -1543,11 +1635,27 @@ function AppContent() {
       </main>
 
       {/* Modals */}
-      <Modal isOpen={!!activeModal} onClose={() => setActiveModal(null)} title={t[activeModal as keyof typeof t] || ''}>
+      <Modal isOpen={!!activeModal} onClose={() => setActiveModal(null)} title={activeModal === 'notification' ? notification.title : (t[activeModal as keyof typeof t] || '')}>
         {txSuccess ? (
           <div className="flex flex-col items-center justify-center py-8 space-y-4">
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center"><CheckCircle2 className="w-12 h-12 text-emerald-500" /></motion.div>
             <p className="text-xl font-bold">Action Successful</p>
+          </div>
+        ) : activeModal === 'notification' ? (
+          <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
+            <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center">
+              <AlertCircle className="w-10 h-10 text-amber-500" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold">{notification.title}</h3>
+              <p className="text-slate-400">{notification.message}</p>
+            </div>
+            <button 
+              onClick={() => setActiveModal(null)}
+              className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl transition-all"
+            >
+              Close
+            </button>
           </div>
         ) : activeModal === 'card' ? (
           <div className="space-y-6">
@@ -1698,12 +1806,12 @@ function AppContent() {
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-50">
         {[
-          { id: 'wallet', icon: Wallet, label: 'Bank' },
-          { id: 'finance', icon: BarChart3, label: 'Finance' },
-          { id: 'exchange', icon: RefreshCw, label: 'Swap' },
-          { id: 'market', icon: Globe, label: 'Market' },
-          { id: 'store', icon: ShoppingBag, label: 'Store' },
-          { id: 'profile', icon: User, label: 'Me' },
+          { id: 'wallet', icon: Wallet, label: t.balance },
+          { id: 'finance', icon: BarChart3, label: t.finance },
+          { id: 'exchange', icon: RefreshCw, label: t.exchange },
+          { id: 'market', icon: Globe, label: t.market },
+          { id: 'store', icon: ShoppingBag, label: t.store },
+          { id: 'profile', icon: User, label: t.profile },
         ].map((tab) => (
           <button 
             key={tab.id} 
@@ -1711,7 +1819,7 @@ function AppContent() {
             className={`flex flex-col items-center space-y-1 transition-all ${activeTab === tab.id ? 'text-amber-500 scale-110' : 'text-slate-500'}`}
           >
             <tab.icon className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-tighter">{tab.label}</span>
+            <span className="text-[8px] font-bold uppercase tracking-tighter max-w-[60px] truncate">{tab.label}</span>
           </button>
         ))}
       </nav>
