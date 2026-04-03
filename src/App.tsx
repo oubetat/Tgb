@@ -139,11 +139,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithGoogle = async () => {
     setLoading(true);
+    setError(null);
     try {
+      // In Pi Browser/iframes, signInWithPopup can be blocked or fail with "requested action is invalid"
+      // if the domain is not authorized in Firebase Console.
       await signInWithPopup(auth, googleProvider);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Google Login Error:", err);
-      setError("Google login failed.");
+      if (err.code === 'auth/operation-not-allowed') {
+        setError("Google login is not enabled in Firebase Console.");
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError("This domain is not authorized in Firebase Console. Please add 'trustglobalbanktgb.netlify.app' to Authorized Domains.");
+      } else {
+        setError("Google login failed. If you are in Pi Browser, please ensure popups are allowed or use Pioneer Connection.");
+      }
     } finally {
       setLoading(false);
     }
@@ -256,16 +265,24 @@ function AppContent() {
             <button 
               onClick={loginWithPi}
               disabled={loading}
-              className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 disabled:opacity-50"
+              className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex flex-col items-center justify-center space-y-1 transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
             >
-              <Globe className="w-5 h-5" />
-              <span>{loading ? 'Connecting...' : 'Pioneer Connection'}</span>
+              <div className="flex items-center space-x-3">
+                <Globe className="w-6 h-6" />
+                <span>Pioneer Connection</span>
+              </div>
+              <span className="text-[10px] opacity-70 font-bold uppercase tracking-widest">Recommended for Pi Browser</span>
             </button>
+
+            <div className="relative py-4">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
+              <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-950 px-2 text-slate-500 font-bold">Or</span></div>
+            </div>
 
             <button 
               onClick={loginWithGoogle}
               disabled={loading}
-              className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-700"
+              className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-800"
             >
               <User className="w-5 h-5" />
               <span>Global User Login</span>
