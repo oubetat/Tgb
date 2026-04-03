@@ -19,7 +19,8 @@ import {
   Zap,
   CheckCircle2,
   X,
-  Languages
+  Languages,
+  Copy
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -293,6 +294,15 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
 
 // --- Main App Content ---
 
+interface Product {
+  id: string;
+  name: string;
+  price: number;
+  image: string;
+  category: string;
+  stock: number;
+}
+
 function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
@@ -300,7 +310,15 @@ function AppContent() {
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [lang, setLang] = useState<'en' | 'ar' | 'fr'>('en');
-  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store'>('wallet');
+  const [copySuccess, setCopySuccess] = useState(false);
+
+  const products: Product[] = [
+    { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
+    { id: '2', name: 'MacBook Air M2', price: 0.0045, image: 'https://picsum.photos/seed/macbook/400/400', category: 'Electronics', stock: 3 },
+    { id: '3', name: 'Coffee Maker', price: 0.0005, image: 'https://picsum.photos/seed/coffee/400/400', category: 'Home', stock: 10 },
+    { id: '4', name: 'Gaming Chair', price: 0.0012, image: 'https://picsum.photos/seed/chair/400/400', category: 'Furniture', stock: 8 },
+  ];
 
   const chartData = [
     { name: 'Mon', value: 314159 },
@@ -313,10 +331,18 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Balance', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card' },
-    ar: { balance: 'إجمالي الرصيد', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا' },
-    fr: { balance: 'Solde Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa' }
+    en: { balance: 'Total Balance', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!' },
+    ar: { balance: 'إجمالي الرصيد', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!' },
+    fr: { balance: 'Solde Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!' }
   }[lang];
+
+  const handleCopyUid = () => {
+    if (user?.uid) {
+      navigator.clipboard.writeText(user.uid);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    }
+  };
 
   const handleTransaction = async (type: string, amount: number, desc: string, recipientUid?: string) => {
     if (!user || !wallet) return;
@@ -380,6 +406,41 @@ function AppContent() {
         status: 'pending',
         balance: 0,
         createdAt: serverTimestamp()
+      });
+
+      setTxSuccess(true);
+      setTimeout(() => {
+        setTxSuccess(false);
+        setActiveModal(null);
+      }, 2000);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleBuyProduct = async (product: Product) => {
+    if (!user || !wallet) return;
+    if (wallet.pi < product.price) {
+      alert("Insufficient Pi balance");
+      return;
+    }
+    setTxLoading(true);
+    try {
+      await updateDoc(doc(db, 'wallets', user.uid), {
+        pi: increment(-product.price),
+        lastUpdated: serverTimestamp()
+      });
+
+      await addDoc(collection(db, 'transactions'), {
+        uid: user.uid,
+        type: 'shop',
+        amount: -product.price,
+        currency: 'pi',
+        description: `Purchased ${product.name}`,
+        timestamp: serverTimestamp(),
+        status: 'completed'
       });
 
       setTxSuccess(true);
@@ -583,7 +644,7 @@ function AppContent() {
 
         {activeTab === 'market' && (
           <section className="space-y-6">
-            <h2 className="text-2xl font-bold">Market Analysis</h2>
+            <h2 className="text-2xl font-bold">{t.market}</h2>
             <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
               <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Pi Value Trend</span></h3>
@@ -611,6 +672,86 @@ function AppContent() {
                   <div><p className="font-bold">Pi Network (GCV)</p><p className="text-xs text-slate-500">Global Consensus Value</p></div>
                 </div>
                 <p className="text-xl font-black text-emerald-500">$314,159</p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'store' && (
+          <section className="space-y-6">
+            <h2 className="text-2xl font-bold">{t.store}</h2>
+            <div className="grid grid-cols-2 gap-4">
+              {products.map(product => (
+                <motion.div key={product.id} whileHover={{ y: -5 }} className="bg-slate-900 rounded-3xl overflow-hidden border border-slate-800 flex flex-col">
+                  <img src={product.image} alt={product.name} className="w-full aspect-square object-cover" referrerPolicy="no-referrer" />
+                  <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
+                    <div>
+                      <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">{product.category}</p>
+                      <h4 className="font-bold text-sm line-clamp-1">{product.name}</h4>
+                    </div>
+                    <div className="flex justify-between items-center pt-2">
+                      <p className="font-black text-amber-500">{product.price} π</p>
+                      <button 
+                        onClick={() => handleBuyProduct(product)}
+                        disabled={txLoading}
+                        className="p-2 bg-amber-500 rounded-lg text-slate-950 hover:bg-amber-600 transition-colors disabled:opacity-50"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'profile' && (
+          <section className="space-y-8">
+            <div className="flex flex-col items-center space-y-4 py-8">
+              <div className="relative">
+                <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center text-slate-950 text-4xl font-black uppercase">
+                  {userData?.displayName?.[0]}
+                </div>
+                <div className="absolute -bottom-2 -right-2 bg-emerald-500 p-2 rounded-full border-4 border-slate-950">
+                  <Shield className="w-4 h-4 text-white" />
+                </div>
+              </div>
+              <div className="text-center">
+                <h2 className="text-2xl font-bold">{userData?.displayName}</h2>
+                <p className="text-slate-500 text-sm">{userData?.email}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+                <div className="flex justify-between items-center">
+                  <p className="text-xs font-bold text-slate-500 uppercase">Your Unique ID (UID)</p>
+                  <button 
+                    onClick={handleCopyUid}
+                    className="flex items-center space-x-2 text-amber-500 hover:text-amber-400 transition-colors"
+                  >
+                    {copySuccess ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    <span className="text-xs font-bold uppercase">{copySuccess ? t.uidCopied : t.copyUid}</span>
+                  </button>
+                </div>
+                <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 break-all font-mono text-xs text-slate-400">
+                  {user?.uid}
+                </div>
+              </div>
+
+              <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+                <h3 className="font-bold">Account Settings</h3>
+                <div className="space-y-2">
+                  <button className="w-full flex justify-between items-center p-4 hover:bg-slate-800 rounded-2xl transition-colors">
+                    <div className="flex items-center space-x-3 text-slate-400"><Languages className="w-5 h-5" /><span>Language</span></div>
+                    <span className="text-amber-500 font-bold uppercase text-xs">{lang}</span>
+                  </button>
+                  <button className="w-full flex justify-between items-center p-4 hover:bg-slate-800 rounded-2xl transition-colors">
+                    <div className="flex items-center space-x-3 text-slate-400"><Shield className="w-5 h-5" /><span>Privacy & Security</span></div>
+                    <ChevronRight className="w-5 h-5 text-slate-600" />
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -665,10 +806,11 @@ function AppContent() {
 
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-20">
-        <button onClick={() => setActiveTab('wallet')} className={`${activeTab === 'wallet' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Wallet className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">Wallet</span></button>
-        <button onClick={() => setActiveTab('market')} className={`${activeTab === 'market' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Globe className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">Market</span></button>
+        <button onClick={() => setActiveTab('wallet')} className={`${activeTab === 'wallet' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Wallet className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.balance.split(' ')[1]}</span></button>
+        <button onClick={() => setActiveTab('market')} className={`${activeTab === 'market' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Globe className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.market.split(' ')[0]}</span></button>
+        <button onClick={() => setActiveTab('store')} className={`${activeTab === 'store' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><ShoppingBag className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.store}</span></button>
         <button onClick={() => setActiveTab('cards')} className={`${activeTab === 'cards' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><CreditCard className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">Cards</span></button>
-        <button onClick={() => setActiveTab('profile')} className={`${activeTab === 'profile' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><User className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">Profile</span></button>
+        <button onClick={() => setActiveTab('profile')} className={`${activeTab === 'profile' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><User className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.profile.split(' ')[0]}</span></button>
       </nav>
     </div>
   );

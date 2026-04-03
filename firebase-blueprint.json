@@ -57,6 +57,20 @@
         "balance": { "type": "number", "description": "Card specific balance in USD" }
       },
       "required": ["uid", "cardNumber", "expiry", "status"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "A product available in the store",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "image": { "type": "string" },
+        "category": { "type": "string" },
+        "stock": { "type": "integer" }
+      },
+      "required": ["name", "price", "image"]
     }
   },
   "firestore": {
@@ -75,6 +89,10 @@
     "/cards/{cardId}": {
       "schema": "Card",
       "description": "Virtual card data"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Store products"
     }
   }
 }
