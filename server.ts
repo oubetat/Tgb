@@ -23,7 +23,9 @@ async function startServer() {
 
   // Pi Network Validation Key Route
   app.get("/validation-key.txt", (req, res) => {
+    console.log(`[Pi Verification] Request from ${req.ip} at ${new Date().toISOString()}`);
     res.type("text/plain");
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.send(process.env.PI_APP_ID || "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69");
   });
 
