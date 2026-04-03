@@ -21,7 +21,13 @@ import {
   X,
   Languages,
   Copy,
-  Link
+  Link,
+  TrendingDown,
+  Users,
+  BarChart3,
+  FileText,
+  QrCode,
+  Activity
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -138,6 +144,34 @@ interface Card {
   type: 'visa' | 'mastercard';
   status: 'active' | 'pending' | 'blocked';
   balance: number;
+}
+
+interface LoanRequest {
+  id: string;
+  uid: string;
+  amount: number;
+  apr: number;
+  purpose: string;
+  status: 'pending' | 'active' | 'completed';
+  createdAt: any;
+}
+
+interface InvestmentPool {
+  id: string;
+  name: string;
+  category: string;
+  totalInvested: number;
+  target: number;
+  membersCount: number;
+  image: string;
+}
+
+interface PiMetrics {
+  totalSupply: number;
+  circulatingSupply: number;
+  lockedSupply: number;
+  activeCountries: number;
+  lastUpdated: any;
 }
 
 interface AuthContextType {
@@ -380,13 +414,26 @@ function AppContent() {
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>('en');
-  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange'>('wallet');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange' | 'finance'>('wallet');
   const [copySuccess, setCopySuccess] = useState(false);
   const [exchangeFrom, setExchangeFrom] = useState('USD');
   const [exchangeTo, setExchangeTo] = useState('PI');
   const [exchangeAmount, setExchangeAmount] = useState<number>(0);
   const [txCurrency, setTxCurrency] = useState('PI');
   const [connectedExchanges, setConnectedExchanges] = useState<string[]>(['Binance', 'MetaMask']);
+  const [piMetrics, setPiMetrics] = useState<PiMetrics>({
+    totalSupply: 100000000000,
+    circulatingSupply: 4102596505,
+    lockedSupply: 5990658971,
+    activeCountries: 210,
+    lastUpdated: new Date()
+  });
+  const [loans, setLoans] = useState<LoanRequest[]>([]);
+  const [pools, setPools] = useState<InvestmentPool[]>([
+    { id: '1', name: 'Tech Startup Fund', category: 'Venture Capital', totalInvested: 1250, target: 2000, membersCount: 125, image: 'https://picsum.photos/seed/tech/400/400' },
+    { id: '2', name: 'Real Estate Pool', category: 'Property', totalInvested: 4450, target: 5000, membersCount: 89, image: 'https://picsum.photos/seed/estate/400/400' }
+  ]);
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -406,8 +453,8 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري' },
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة' },
     fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles Connectés', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané' },
     es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras Conectados', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo' },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin yettuseqlen', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren' },
@@ -721,7 +768,12 @@ function AppContent() {
                       ${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h2>
                   </div>
-                  <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10"><Wallet className="w-7 h-7" /></div>
+                  <div className="flex space-x-2">
+                    <button onClick={() => setShowQrModal(true)} className="p-4 bg-slate-950/10 rounded-2xl backdrop-blur-sm border border-white/10 hover:bg-slate-950/20 transition-all">
+                      <QrCode className="w-7 h-7" />
+                    </button>
+                    <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10"><Wallet className="w-7 h-7" /></div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
@@ -737,6 +789,50 @@ function AppContent() {
               <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
               <div className="absolute -left-10 -top-10 w-40 h-40 bg-slate-950/5 rounded-full blur-3xl" />
             </motion.div>
+
+            {/* Global Pi Metrics */}
+            <div className="bg-slate-900/50 rounded-3xl p-6 border border-slate-800 space-y-6">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-sm uppercase tracking-widest text-slate-500 flex items-center space-x-2">
+                  <Globe className="w-4 h-4" />
+                  <span>{t.metrics}</span>
+                </h3>
+                <span className="text-[10px] font-black text-emerald-500 bg-emerald-500/10 px-2 py-1 rounded-full">LIVE</span>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">{t.circulatingSupply}</p>
+                  <p className="font-black text-sm">{(piMetrics.circulatingSupply / 1000000000).toFixed(2)}B π</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">{t.lockedSupply}</p>
+                  <p className="font-black text-sm">{(piMetrics.lockedSupply / 1000000000).toFixed(2)}B π</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">{t.activeCountries}</p>
+                  <p className="font-black text-sm">{piMetrics.activeCountries} Countries</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase">Growth</p>
+                  <p className="font-black text-sm text-emerald-500">+132.75%</p>
+                </div>
+              </div>
+
+              <div className="h-32 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorValue)" strokeWidth={3} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
             {/* Assets List */}
             <section className="space-y-4">
@@ -805,6 +901,113 @@ function AppContent() {
           </>
         )}
 
+        {activeTab === 'finance' && (
+          <section className="space-y-8 pb-20">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black">{t.finance}</h2>
+              <p className="text-slate-500 text-sm">Advanced P2P Lending & Investment Pools</p>
+            </div>
+
+            {/* P2P Lending */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold flex items-center space-x-2">
+                  <Users className="w-5 h-5 text-amber-500" />
+                  <span>{t.lending}</span>
+                </h3>
+                <button className="text-xs font-bold text-amber-500 hover:underline">Create Request</button>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { id: '1', user: 'GlobalPioneer', amount: 50, apr: 4.5, purpose: 'Business Expansion', rating: 'AAA' },
+                  { id: '2', user: 'TechInnovator', amount: 25, apr: 3.8, purpose: 'Education', rating: 'AA' }
+                ].map(loan => (
+                  <div key={loan.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex justify-between items-center">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">{loan.rating}</span>
+                        <p className="font-bold text-sm">{loan.purpose}</p>
+                      </div>
+                      <p className="text-xs text-slate-500">Requested by {loan.user}</p>
+                      <p className="text-lg font-black text-amber-500">{loan.amount} π <span className="text-xs text-slate-400 font-bold">@ {loan.apr}% APR</span></p>
+                    </div>
+                    <button className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all text-sm">
+                      Execute Loan
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Investment Pools */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-amber-500" />
+                <span>{t.pools}</span>
+              </h3>
+              <div className="grid grid-cols-1 gap-4">
+                {pools.map(pool => (
+                  <div key={pool.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
+                    <div className="h-24 bg-slate-800 relative">
+                      <img src={pool.image} alt={pool.name} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
+                      <div className="absolute inset-0 p-4 flex flex-col justify-end">
+                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{pool.category}</p>
+                        <h4 className="font-bold text-lg">{pool.name}</h4>
+                      </div>
+                    </div>
+                    <div className="p-5 space-y-4">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-500">{pool.membersCount} Members</span>
+                        <span className="text-amber-500">{pool.totalInvested} / {pool.target} π</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: `${(pool.totalInvested / pool.target) * 100}%` }} />
+                      </div>
+                      <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all">
+                        Join Group
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Personal Vault */}
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-3xl p-6 text-slate-950 space-y-4 shadow-xl shadow-amber-500/20">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <h3 className="font-black text-xl">{t.vault}</h3>
+                  <p className="text-slate-900/70 text-xs font-bold italic">Secure your Pi for the long term</p>
+                </div>
+                <Lock className="w-8 h-8 opacity-50" />
+              </div>
+              <div className="bg-slate-950/10 rounded-2xl p-4 border border-slate-950/10">
+                <p className="text-[10px] font-black uppercase mb-1">Current Staked</p>
+                <p className="text-2xl font-black">3,128,929.56 π</p>
+              </div>
+              <button className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl hover:bg-slate-900 transition-all">
+                Stake Pi to Boost Rank
+              </button>
+            </div>
+
+            {/* Partnership Proposal */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-amber-500/10 rounded-2xl">
+                  <FileText className="w-6 h-6 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold">{t.partnership}</h3>
+                  <p className="text-xs text-slate-500">Collaborate with TrustBank Global</p>
+                </div>
+              </div>
+              <button onClick={() => setActiveModal('partnership')} className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm">
+                Submit Business Proposal
+              </button>
+            </div>
+          </section>
+        )}
+
         {activeTab === 'cards' && (
           <section className="space-y-8">
             <div className="flex justify-between items-center">
@@ -849,52 +1052,109 @@ function AppContent() {
           </section>
         )}
 
-        {activeTab === 'market' && (
-          <section className="space-y-6">
-            <h2 className="text-2xl font-bold">{t.market}</h2>
-            <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Pi Value Trend</span></h3>
-                <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg">+0.05%</span>
+        {activeTab === 'finance' && (
+          <section className="space-y-8 pb-20">
+            <div className="space-y-2">
+              <h2 className="text-3xl font-black">{t.finance}</h2>
+              <p className="text-slate-500 text-sm">Advanced P2P Lending & Investment Pools</p>
+            </div>
+
+            {/* P2P Lending */}
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold flex items-center space-x-2">
+                  <Users className="w-5 h-5 text-amber-500" />
+                  <span>{t.lending}</span>
+                </h3>
+                <button className="text-xs font-bold text-amber-500 hover:underline">Create Request</button>
               </div>
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <defs>
-                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorValue)" strokeWidth={3} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px' }} />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div className="space-y-3">
+                {[
+                  { id: '1', user: 'GlobalPioneer', amount: 50, apr: 4.5, purpose: 'Business Expansion', rating: 'AAA' },
+                  { id: '2', user: 'TechInnovator', amount: 25, apr: 3.8, purpose: 'Education', rating: 'AA' }
+                ].map(loan => (
+                  <div key={loan.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex justify-between items-center">
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">{loan.rating}</span>
+                        <p className="font-bold text-sm">{loan.purpose}</p>
+                      </div>
+                      <p className="text-xs text-slate-500">Requested by {loan.user}</p>
+                      <p className="text-lg font-black text-amber-500">{loan.amount} π <span className="text-xs text-slate-400 font-bold">@ {loan.apr}% APR</span></p>
+                    </div>
+                    <button className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all text-sm">
+                      Execute Loan
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
-            
+
+            {/* Investment Pools */}
             <div className="space-y-4">
-              <h3 className="text-lg font-bold">Top Cryptocurrencies</h3>
-              <div className="grid grid-cols-1 gap-3">
-                {Object.entries(prices)
-                  .sort((a, b) => Number(b[1]) - Number(a[1]))
-                  .slice(0, 15)
-                  .map(([symbol, price]) => (
-                  <div key={symbol} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex justify-between items-center">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-400 text-sm">{symbol[0]}</div>
-                      <div>
-                        <p className="font-bold">{symbol}</p>
-                        <p className="text-[10px] text-slate-500 uppercase">{symbol === 'PI' ? 'Consensus Value' : 'Market Price'}</p>
+              <h3 className="text-lg font-bold flex items-center space-x-2">
+                <Activity className="w-5 h-5 text-amber-500" />
+                <span>{t.pools}</span>
+              </h3>
+              <div className="grid grid-cols-1 gap-4">
+                {pools.map(pool => (
+                  <div key={pool.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
+                    <div className="h-24 bg-slate-800 relative">
+                      <img src={pool.image} alt={pool.name} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
+                      <div className="absolute inset-0 p-4 flex flex-col justify-end">
+                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{pool.category}</p>
+                        <h4 className="font-bold text-lg">{pool.name}</h4>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-black text-emerald-500">${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                      <p className="text-[10px] text-slate-500 uppercase">24h Vol: High</p>
+                    <div className="p-5 space-y-4">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-500">{pool.membersCount} Members</span>
+                        <span className="text-amber-500">{pool.totalInvested} / {pool.target} π</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full bg-amber-500" style={{ width: `${(pool.totalInvested / pool.target) * 100}%` }} />
+                      </div>
+                      <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all">
+                        Join Group
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Personal Vault */}
+            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-3xl p-6 text-slate-950 space-y-4 shadow-xl shadow-amber-500/20">
+              <div className="flex justify-between items-start">
+                <div className="space-y-1">
+                  <h3 className="font-black text-xl">{t.vault}</h3>
+                  <p className="text-slate-900/70 text-xs font-bold italic">Secure your Pi for the long term</p>
+                </div>
+                <Lock className="w-8 h-8 opacity-50" />
+              </div>
+              <div className="bg-slate-950/10 rounded-2xl p-4 border border-slate-950/10">
+                <p className="text-[10px] font-black uppercase mb-1">Current Staked</p>
+                <p className="text-2xl font-black">3,128,929.56 π</p>
+              </div>
+              <button className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl hover:bg-slate-900 transition-all">
+                Stake Pi to Boost Rank
+              </button>
+            </div>
+
+            {/* Partnership Proposal */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-amber-500/10 rounded-2xl">
+                  <FileText className="w-6 h-6 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="font-bold">{t.partnership}</h3>
+                  <p className="text-xs text-slate-500">Collaborate with TrustBank Global</p>
+                </div>
+              </div>
+              <button className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm">
+                Submit Business Proposal
+              </button>
             </div>
           </section>
         )}
@@ -1269,23 +1529,87 @@ function AppContent() {
         )}
       </Modal>
 
+      {/* QR Modal */}
+      <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="Your Wallet QR">
+        <div className="flex flex-col items-center justify-center space-y-6 py-8">
+          <div className="p-6 bg-white rounded-[2.5rem] shadow-2xl shadow-amber-500/20">
+            <QrCode className="w-48 h-48 text-slate-950" />
+          </div>
+          <div className="text-center space-y-2">
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Wallet Address</p>
+            <div className="flex items-center space-x-2 bg-slate-900 px-4 py-2 rounded-xl border border-slate-800">
+              <code className="text-xs font-mono text-amber-500">{userData?.uid?.slice(0, 16)}...</code>
+              <button onClick={() => {
+                navigator.clipboard.writeText(userData?.uid || '');
+                alert('Address copied!');
+              }} className="text-slate-400 hover:text-white"><Copy className="w-4 h-4" /></button>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 text-center max-w-[200px]">Scan this code to receive Pi instantly from any Pioneer.</p>
+        </div>
+      </Modal>
+
+      {/* Partnership Modal */}
+      <Modal isOpen={activeModal === 'partnership'} onClose={() => setActiveModal(null)} title={t.partnership}>
+        <div className="space-y-6">
+          <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20 space-y-4">
+            <div className="flex items-center space-x-3 text-amber-500">
+              <FileText className="w-6 h-6" />
+              <p className="font-bold">Business Proposal</p>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              TrustBank Global is looking for strategic partners in e-commerce, logistics, and fintech. 
+              Submit your proposal to integrate your services into our ecosystem.
+            </p>
+          </div>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase">Company Name</label>
+              <input type="text" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" placeholder="Enter company name" />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase">Proposal Type</label>
+              <select className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500">
+                <option>E-commerce Integration</option>
+                <option>Liquidity Provider</option>
+                <option>Marketing Partnership</option>
+                <option>Other</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-500 uppercase">Message</label>
+              <textarea className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 h-32 focus:outline-none focus:border-amber-500" placeholder="Describe your proposal..." />
+            </div>
+          </div>
+          <button onClick={() => {
+            setTxSuccess(true);
+            setTimeout(() => {
+              setTxSuccess(false);
+              setActiveModal(null);
+            }, 2000);
+          }} className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20">
+            Submit Proposal
+          </button>
+        </div>
+      </Modal>
+
       {/* Bottom Nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-50">
         {[
-          { id: 'wallet', icon: Wallet, label: 'Wallet' },
-          { id: 'exchange', icon: RefreshCw, label: 'Exchange' },
+          { id: 'wallet', icon: Wallet, label: 'Bank' },
+          { id: 'finance', icon: BarChart3, label: 'Finance' },
+          { id: 'exchange', icon: RefreshCw, label: 'Swap' },
           { id: 'market', icon: Globe, label: 'Market' },
           { id: 'store', icon: ShoppingBag, label: 'Store' },
-          { id: 'cards', icon: CreditCard, label: 'Cards' },
-          { id: 'profile', icon: User, label: 'Profile' },
+          { id: 'profile', icon: User, label: 'Me' },
         ].map((tab) => (
           <button 
             key={tab.id} 
             onClick={() => setActiveTab(tab.id as any)}
             className={`flex flex-col items-center space-y-1 transition-all ${activeTab === tab.id ? 'text-amber-500 scale-110' : 'text-slate-500'}`}
           >
-            <tab.icon className="w-6 h-6" />
-            <span className="text-[10px] font-bold uppercase">{tab.label}</span>
+            <tab.icon className="w-5 h-5" />
+            <span className="text-[10px] font-bold uppercase tracking-tighter">{tab.label}</span>
           </button>
         ))}
       </nav>
