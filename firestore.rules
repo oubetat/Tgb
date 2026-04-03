@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Unique identifier
+    //   - email: string (required, email format) - User's email
+    //   - displayName: string (optional) - User's name
+    //   - photoURL: string (optional) - Profile photo URL
+    //   - role: string (required, enum: pioneer, global, admin) - User's role
+    //   - createdAt: timestamp (required) - Creation time
+    //
+    // Collection: wallets
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required) - Owner's UID
+    //   - pi: number (required, >= 0) - Pi balance
+    //   - usd: number (required, >= 0) - USD balance
+    //   - dzd: number (required, >= 0) - DZD balance
+    //   - lastUpdated: timestamp (required) - Last update time
+    //
+    // Collection: transactions
+    // Document ID: {transactionId}
+    // Fields:
+    //   - id: string (required) - Transaction ID
+    //   - senderUid: string (required) - Sender's UID
+    //   - receiverUid: string (optional) - Receiver's UID
+    //   - amount: number (required, > 0) - Amount
+    //   - currency: string (required, enum: pi, usd, dzd) - Currency
+    //   - type: string (required, enum: deposit, withdrawal, transfer, shop) - Type
+    //   - status: string (required, enum: pending, completed, failed) - Status
+    //   - timestamp: timestamp (required) - Transaction time
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "oubetat.1@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['pioneer', 'global', 'admin'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidWallet(data) {
+      return hasOnlyAllowedFields(['uid', 'pi', 'usd', 'dzd', 'lastUpdated']) &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.pi is number && data.pi >= 0 &&
+             data.usd is number && data.usd >= 0 &&
+             data.dzd is number && data.dzd >= 0 &&
+             data.lastUpdated is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(['id', 'senderUid', 'receiverUid', 'amount', 'currency', 'type', 'status', 'timestamp']) &&
+             data.id is string &&
+             data.senderUid is string && data.senderUid == request.auth.uid &&
+             data.amount is number && data.amount > 0 &&
+             data.currency in ['pi', 'usd', 'dzd'] &&
+             data.type in ['deposit', 'withdrawal', 'transfer', 'shop'] &&
+             data.status in ['pending', 'completed', 'failed'] &&
+             data.timestamp is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && (request.resource.data.role == resource.data.role || isAdmin());
+    }
+
+    match /wallets/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidWallet(request.resource.data);
+      allow update: if (isOwner(userId) && isValidWallet(request.resource.data)) || isAdmin();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

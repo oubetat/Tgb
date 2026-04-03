@@ -1,11 +1,33 @@
-<div align="center">
+# Trust Global Bank (TGB)
 
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+A secure, encrypted banking application for Pi Network pioneers and global users.
 
-  <h1>Built with AI Studio</h2>
+## Features
 
-  <p>The fastest path from prompt to production with Gemini.</p>
+- **Pi Network Integration:** Connect using your Pi Wallet (via Pi SDK).
+- **Global Access:** Secure login for non-pioneers using Google Authentication.
+- **Real-time Balances:** Live synchronization of Pi, USD, and DZD balances via Firebase Firestore.
+- **Market Insights:** Live exchange rates (USD/DZD) and fixed GCV Pi rates.
+- **Secure Infrastructure:** Powered by Firebase Auth and Firestore with strict security rules.
 
-  <a href="https://aistudio.google.com/apps">Start building</a>
+## Tech Stack
 
-</div>
+- **Frontend:** React 19, Vite, Tailwind CSS, Motion.
+- **Backend:** Node.js, Express (for API & Exchange Rates).
+- **Database/Auth:** Firebase (Firestore & Authentication).
+
+## Getting Started
+
+1. **Firebase Setup:** The app is configured with a dedicated Firebase project.
+2. **Pi Browser:** For the best experience as a Pioneer, open this app inside the Pi Browser.
+3. **Global Users:** Use the "Global User Login" to sign in with your Google account.
+
+## Security
+
+All financial data is protected by Firebase Security Rules, ensuring that users can only access their own wallets and transaction history.
+
+## Exporting the Project
+To download this entire project as a ZIP file:
+1. Click on the **Settings** (gear icon) in the AI Studio menu.
+2. Select **Export to ZIP**.
+3. Save the file to your device.
