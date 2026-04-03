@@ -901,109 +901,52 @@ function AppContent() {
           </>
         )}
 
-        {activeTab === 'finance' && (
-          <section className="space-y-8 pb-20">
-            <div className="space-y-2">
-              <h2 className="text-3xl font-black">{t.finance}</h2>
-              <p className="text-slate-500 text-sm">Advanced P2P Lending & Investment Pools</p>
-            </div>
-
-            {/* P2P Lending */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-bold flex items-center space-x-2">
-                  <Users className="w-5 h-5 text-amber-500" />
-                  <span>{t.lending}</span>
-                </h3>
-                <button className="text-xs font-bold text-amber-500 hover:underline">Create Request</button>
+        {activeTab === 'market' && (
+          <section className="space-y-6">
+            <h2 className="text-2xl font-bold">{t.market}</h2>
+            <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Pi Value Trend</span></h3>
+                <span className="text-xs text-emerald-500 font-bold bg-emerald-500/10 px-2 py-1 rounded-lg">+0.05%</span>
               </div>
-              <div className="space-y-3">
-                {[
-                  { id: '1', user: 'GlobalPioneer', amount: 50, apr: 4.5, purpose: 'Business Expansion', rating: 'AAA' },
-                  { id: '2', user: 'TechInnovator', amount: 25, apr: 3.8, purpose: 'Education', rating: 'AA' }
-                ].map(loan => (
-                  <div key={loan.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex justify-between items-center">
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] font-black bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">{loan.rating}</span>
-                        <p className="font-bold text-sm">{loan.purpose}</p>
-                      </div>
-                      <p className="text-xs text-slate-500">Requested by {loan.user}</p>
-                      <p className="text-lg font-black text-amber-500">{loan.amount} π <span className="text-xs text-slate-400 font-bold">@ {loan.apr}% APR</span></p>
-                    </div>
-                    <button className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all text-sm">
-                      Execute Loan
-                    </button>
-                  </div>
-                ))}
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData}>
+                    <defs>
+                      <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="value" stroke="#f59e0b" fillOpacity={1} fill="url(#colorValue)" strokeWidth={3} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px' }} />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
-
-            {/* Investment Pools */}
+            
             <div className="space-y-4">
-              <h3 className="text-lg font-bold flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-amber-500" />
-                <span>{t.pools}</span>
-              </h3>
-              <div className="grid grid-cols-1 gap-4">
-                {pools.map(pool => (
-                  <div key={pool.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
-                    <div className="h-24 bg-slate-800 relative">
-                      <img src={pool.image} alt={pool.name} className="w-full h-full object-cover opacity-50" referrerPolicy="no-referrer" />
-                      <div className="absolute inset-0 p-4 flex flex-col justify-end">
-                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{pool.category}</p>
-                        <h4 className="font-bold text-lg">{pool.name}</h4>
+              <h3 className="text-lg font-bold">Top Cryptocurrencies</h3>
+              <div className="grid grid-cols-1 gap-3">
+                {Object.entries(prices)
+                  .sort((a, b) => Number(b[1]) - Number(a[1]))
+                  .slice(0, 15)
+                  .map(([symbol, price]) => (
+                  <div key={symbol} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex justify-between items-center">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-400 text-sm">{symbol[0]}</div>
+                      <div>
+                        <p className="font-bold">{symbol}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">{symbol === 'PI' ? 'Consensus Value' : 'Market Price'}</p>
                       </div>
                     </div>
-                    <div className="p-5 space-y-4">
-                      <div className="flex justify-between text-xs font-bold">
-                        <span className="text-slate-500">{pool.membersCount} Members</span>
-                        <span className="text-amber-500">{pool.totalInvested} / {pool.target} π</span>
-                      </div>
-                      <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-amber-500" style={{ width: `${(pool.totalInvested / pool.target) * 100}%` }} />
-                      </div>
-                      <button className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl transition-all">
-                        Join Group
-                      </button>
+                    <div className="text-right">
+                      <p className="font-black text-emerald-500">${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] text-slate-500 uppercase">24h Vol: High</p>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Personal Vault */}
-            <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-3xl p-6 text-slate-950 space-y-4 shadow-xl shadow-amber-500/20">
-              <div className="flex justify-between items-start">
-                <div className="space-y-1">
-                  <h3 className="font-black text-xl">{t.vault}</h3>
-                  <p className="text-slate-900/70 text-xs font-bold italic">Secure your Pi for the long term</p>
-                </div>
-                <Lock className="w-8 h-8 opacity-50" />
-              </div>
-              <div className="bg-slate-950/10 rounded-2xl p-4 border border-slate-950/10">
-                <p className="text-[10px] font-black uppercase mb-1">Current Staked</p>
-                <p className="text-2xl font-black">3,128,929.56 π</p>
-              </div>
-              <button className="w-full py-4 bg-slate-950 text-white font-black rounded-2xl hover:bg-slate-900 transition-all">
-                Stake Pi to Boost Rank
-              </button>
-            </div>
-
-            {/* Partnership Proposal */}
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="p-3 bg-amber-500/10 rounded-2xl">
-                  <FileText className="w-6 h-6 text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold">{t.partnership}</h3>
-                  <p className="text-xs text-slate-500">Collaborate with TrustBank Global</p>
-                </div>
-              </div>
-              <button onClick={() => setActiveModal('partnership')} className="w-full py-3 border border-slate-800 hover:bg-slate-800 text-white font-bold rounded-xl transition-all text-sm">
-                Submit Business Proposal
-              </button>
             </div>
           </section>
         )}
