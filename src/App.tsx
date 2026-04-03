@@ -72,6 +72,8 @@ interface UserData {
   displayName: string;
   role: 'pioneer' | 'global' | 'admin';
   photoURL?: string;
+  piUid?: string;
+  kycStatus?: 'none' | 'pending' | 'verified' | 'rejected';
 }
 
 interface WalletData {
@@ -149,6 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               displayName: firebaseUser.displayName || 'Pioneer User',
               role: firebaseUser.isAnonymous ? 'pioneer' : 'global',
               photoURL: firebaseUser.photoURL || '',
+              kycStatus: firebaseUser.isAnonymous ? 'verified' : 'none',
             };
             await setDoc(userDocRef, {
               ...newUserData,
@@ -324,8 +327,8 @@ function AppContent() {
   const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | null>(null);
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
-  const [lang, setLang] = useState<'en' | 'ar' | 'fr'>('en');
-  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store'>('wallet');
+  const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>('en');
+  const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange'>('wallet');
   const [copySuccess, setCopySuccess] = useState(false);
 
   const products: Product[] = [
@@ -346,9 +349,16 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Balance', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!' },
-    ar: { balance: 'إجمالي الرصيد', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!' },
-    fr: { balance: 'Solde Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!' }
+    en: { balance: 'Total Balance', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'GCV Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified' },
+    ar: { balance: 'إجمالي الرصيد', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل GCV', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق' },
+    fr: { balance: 'Solde Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange GCV', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié' },
+    es: { balance: 'Saldo Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio GCV', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado' },
+    kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel' },
+    ko: { balance: '총 잔액', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: 'GCV 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨' },
+    zh: { balance: '总余额', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: 'GCV 交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证' },
+    ja: { balance: '総残高', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'GCV取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み' },
+    it: { balance: 'Saldo Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio GCV', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato' },
+    pt: { balance: 'Saldo Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca GCV', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado' }
   }[lang];
 
   const handleCopyUid = () => {
@@ -472,6 +482,56 @@ function AppContent() {
 
   const calculateUsd = (pi: number) => (pi * PI_FIXED_PRICE).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const calculateDzd = (pi: number) => (pi * PI_FIXED_PRICE * exchangeRates.usd_dzd).toLocaleString('ar-DZ', { style: 'currency', currency: 'DZD' });
+
+  const handleKycSubmit = async () => {
+    if (!user) return;
+    setTxLoading(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        kycStatus: 'pending'
+      });
+      setTxSuccess(true);
+      setTimeout(() => {
+        setTxSuccess(false);
+        setActiveTab('profile');
+      }, 2000);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleBuyPiWithUsd = async (usdAmount: number) => {
+    if (!user || !wallet) return;
+    if (userData?.role === 'global' && userData?.kycStatus !== 'verified') {
+      alert(t.kycRequired);
+      return;
+    }
+    setTxLoading(true);
+    try {
+      const piAmount = usdAmount / PI_FIXED_PRICE;
+      await updateDoc(doc(db, 'wallets', user.uid), {
+        pi: increment(piAmount),
+        lastUpdated: serverTimestamp()
+      });
+      await addDoc(collection(db, 'transactions'), {
+        uid: user.uid,
+        type: 'deposit',
+        amount: piAmount,
+        currency: 'pi',
+        description: `Bought Pi with ${usdAmount} USD`,
+        timestamp: serverTimestamp(),
+        status: 'completed'
+      });
+      setTxSuccess(true);
+      setTimeout(() => setTxSuccess(false), 2000);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setTxLoading(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -692,6 +752,105 @@ function AppContent() {
           </section>
         )}
 
+        {activeTab === 'exchange' && (
+          <section className="space-y-8">
+            <h2 className="text-2xl font-bold">{t.exchange}</h2>
+            
+            {userData?.role === 'global' && userData?.kycStatus !== 'verified' ? (
+              <div className="bg-rose-500/10 border border-rose-500/20 p-8 rounded-[2.5rem] text-center space-y-6">
+                <div className="w-20 h-20 bg-rose-500/10 rounded-full flex items-center justify-center mx-auto">
+                  <Lock className="w-10 h-10 text-rose-500" />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold">{t.kycRequired}</h3>
+                  <p className="text-slate-400 text-sm">External users must verify their identity to buy Pi at GCV rate.</p>
+                </div>
+                {userData?.kycStatus === 'pending' ? (
+                  <div className="py-3 px-6 bg-amber-500/20 text-amber-500 rounded-2xl font-bold">
+                    {t.kycPending}
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setActiveTab('profile')}
+                    className="px-8 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl hover:bg-amber-600 transition-all"
+                  >
+                    Go to Profile to Verify
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-6">
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 space-y-8">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center font-black text-amber-500 text-xl">π</div>
+                      <div>
+                        <p className="font-bold">Pi (GCV)</p>
+                        <p className="text-xs text-slate-500">1 Pi = $314,159</p>
+                      </div>
+                    </div>
+                    <TrendingUp className="w-6 h-6 text-emerald-500" />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold text-slate-500 uppercase">Amount to Spend (USD)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          placeholder="100" 
+                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" 
+                          id="buyUsdAmount"
+                          onChange={(e) => {
+                            const piVal = parseFloat(e.target.value) / PI_FIXED_PRICE;
+                            const display = document.getElementById('piResult');
+                            if (display) display.innerText = piVal.toFixed(8) + ' π';
+                          }}
+                        />
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</div>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center px-2">
+                      <span className="text-sm text-slate-500">You will receive:</span>
+                      <span className="font-black text-amber-500 text-lg" id="piResult">0.00000000 π</span>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => {
+                      const amount = parseFloat((document.getElementById('buyUsdAmount') as HTMLInputElement).value);
+                      if (amount > 0) handleBuyPiWithUsd(amount);
+                    }}
+                    disabled={txLoading}
+                    className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+                  >
+                    {txLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : t.buyPi}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">External Wallet</p>
+                    <p className="font-bold text-sm">Binance / MetaMask</p>
+                    <div className="mt-4 flex items-center space-x-2 text-emerald-500 text-xs">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Connected</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-900/50 p-6 rounded-3xl border border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Network Fee</p>
+                    <p className="font-bold text-sm">0.0001 π</p>
+                    <div className="mt-4 flex items-center space-x-2 text-slate-500 text-xs">
+                      <Zap className="w-4 h-4" />
+                      <span>Instant Settlement</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+
         {activeTab === 'store' && (
           <section className="space-y-6">
             <h2 className="text-2xl font-bold">{t.store}</h2>
@@ -739,6 +898,39 @@ function AppContent() {
             </div>
 
             <div className="space-y-4">
+              {userData?.role === 'global' && (
+                <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-bold">{t.kyc}</h3>
+                    <div className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase ${
+                      userData.kycStatus === 'verified' ? 'bg-emerald-500/20 text-emerald-500' :
+                      userData.kycStatus === 'pending' ? 'bg-amber-500/20 text-amber-500' :
+                      'bg-rose-500/20 text-rose-500'
+                    }`}>
+                      {userData.kycStatus === 'verified' ? t.kycVerified : 
+                       userData.kycStatus === 'pending' ? t.kycPending : t.kycRequired}
+                    </div>
+                  </div>
+                  
+                  {userData.kycStatus === 'none' && (
+                    <div className="space-y-4">
+                      <p className="text-xs text-slate-500">Upload your ID card or Passport to unlock GCV Exchange features.</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-bold hover:border-amber-500 transition-colors">ID Card</button>
+                        <button className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-bold hover:border-amber-500 transition-colors">Passport</button>
+                      </div>
+                      <button 
+                        onClick={handleKycSubmit}
+                        disabled={txLoading}
+                        className="w-full py-3 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all"
+                      >
+                        {txLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Submit for Review"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
                 <div className="flex justify-between items-center">
                   <p className="text-xs font-bold text-slate-500 uppercase">Your Unique ID (UID)</p>
@@ -758,10 +950,20 @@ function AppContent() {
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
                 <h3 className="font-bold">Account Settings</h3>
                 <div className="space-y-2">
-                  <button className="w-full flex justify-between items-center p-4 hover:bg-slate-800 rounded-2xl transition-colors">
+                  <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-3">
                     <div className="flex items-center space-x-3 text-slate-400"><Languages className="w-5 h-5" /><span>Language</span></div>
-                    <span className="text-amber-500 font-bold uppercase text-xs">{lang}</span>
-                  </button>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['en', 'ar', 'fr', 'es', 'kab', 'ko', 'zh', 'ja', 'it', 'pt'].map((l) => (
+                        <button 
+                          key={l}
+                          onClick={() => setLang(l as any)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase border transition-all ${lang === l ? 'bg-amber-500 border-amber-500 text-slate-950' : 'border-slate-800 text-slate-500'}`}
+                        >
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button className="w-full flex justify-between items-center p-4 hover:bg-slate-800 rounded-2xl transition-colors">
                     <div className="flex items-center space-x-3 text-slate-400"><Shield className="w-5 h-5" /><span>Privacy & Security</span></div>
                     <ChevronRight className="w-5 h-5 text-slate-600" />
@@ -820,12 +1022,24 @@ function AppContent() {
       </Modal>
 
       {/* Bottom Nav */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-20">
-        <button onClick={() => setActiveTab('wallet')} className={`${activeTab === 'wallet' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Wallet className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.balance.split(' ')[1]}</span></button>
-        <button onClick={() => setActiveTab('market')} className={`${activeTab === 'market' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><Globe className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.market.split(' ')[0]}</span></button>
-        <button onClick={() => setActiveTab('store')} className={`${activeTab === 'store' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><ShoppingBag className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.store}</span></button>
-        <button onClick={() => setActiveTab('cards')} className={`${activeTab === 'cards' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><CreditCard className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">Cards</span></button>
-        <button onClick={() => setActiveTab('profile')} className={`${activeTab === 'profile' ? 'text-amber-500' : 'text-slate-500'} flex flex-col items-center space-y-1`}><User className="w-6 h-6" /><span className="text-[10px] font-bold uppercase">{t.profile.split(' ')[0]}</span></button>
+      <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 flex justify-around items-center z-50">
+        {[
+          { id: 'wallet', icon: Wallet, label: 'Wallet' },
+          { id: 'exchange', icon: RefreshCw, label: 'Exchange' },
+          { id: 'market', icon: Globe, label: 'Market' },
+          { id: 'store', icon: ShoppingBag, label: 'Store' },
+          { id: 'cards', icon: CreditCard, label: 'Cards' },
+          { id: 'profile', icon: User, label: 'Profile' },
+        ].map((tab) => (
+          <button 
+            key={tab.id} 
+            onClick={() => setActiveTab(tab.id as any)}
+            className={`flex flex-col items-center space-y-1 transition-all ${activeTab === tab.id ? 'text-amber-500 scale-110' : 'text-slate-500'}`}
+          >
+            <tab.icon className="w-6 h-6" />
+            <span className="text-[10px] font-bold uppercase">{tab.label}</span>
+          </button>
+        ))}
       </nav>
     </div>
   );

@@ -9,6 +9,8 @@
 //   - email: string (required) - User's email
 //   - displayName: string - User's name
 //   - role: string (required, ['pioneer', 'global', 'admin']) - User's role
+//   - piUid: string - Pi Network unique ID
+//   - kycStatus: string (['none', 'pending', 'verified', 'rejected']) - KYC status
 //   - createdAt: timestamp - Creation time
 //
 // Collection: wallets
@@ -59,7 +61,9 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'email', 'role']) &&
              data.uid is string &&
              data.email is string &&
-             data.role in ['pioneer', 'global', 'admin'];
+             data.role in ['pioneer', 'global', 'admin'] &&
+             (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
+             (!('piUid' in data) || data.piUid is string);
     }
 
     function isValidWallet(data) {

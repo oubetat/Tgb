@@ -10,9 +10,24 @@
         "displayName": { "type": "string", "description": "User's display name" },
         "photoURL": { "type": "string", "description": "User's profile photo URL" },
         "role": { "type": "string", "enum": ["pioneer", "global", "admin"], "description": "User's role in the system" },
+        "piUid": { "type": "string", "description": "Pi Network unique ID for Pioneers" },
+        "kycStatus": { "type": "string", "enum": ["none", "pending", "verified", "rejected"], "description": "KYC status for external users" },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created" }
       },
       "required": ["uid", "email", "role"]
+    },
+    "KycDocument": {
+      "title": "KYC Document",
+      "description": "Metadata for KYC documents uploaded by external users",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User's UID" },
+        "documentType": { "type": "string", "enum": ["passport", "id_card", "driver_license"] },
+        "documentUrl": { "type": "string", "description": "URL to the document in storage" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "submittedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "documentType", "documentUrl", "status"]
     },
     "Wallet": {
       "title": "Wallet",
