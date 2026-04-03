@@ -65,6 +65,41 @@ import {
 
 const PI_FIXED_PRICE = 314159;
 
+const useBinancePrices = () => {
+  const [prices, setPrices] = useState<{ [symbol: string]: number }>({ PI: PI_FIXED_PRICE, USD: 1, DZD: 0.0074 });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      try {
+        const response = await fetch('https://api.binance.com/api/v3/ticker/price');
+        const data = await response.json();
+        const newPrices: { [symbol: string]: number } = { PI: PI_FIXED_PRICE, USD: 1, DZD: 0.0074 };
+        
+        // Map Binance prices (symbol like BTCUSDT) to our symbols
+        data.forEach((item: any) => {
+          if (item.symbol.endsWith('USDT')) {
+            const symbol = item.symbol.replace('USDT', '');
+            newPrices[symbol] = parseFloat(item.price);
+          }
+        });
+        
+        setPrices(newPrices);
+      } catch (err) {
+        console.error("Binance price error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPrices();
+    const interval = setInterval(fetchPrices, 30000); // Update every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  return { prices, loading };
+};
+
 // --- Context & Types ---
 interface UserData {
   uid: string;
@@ -77,16 +112,17 @@ interface UserData {
 }
 
 interface WalletData {
-  pi: number;
-  usd: number;
-  dzd: number;
+  uid: string;
+  balances: { [symbol: string]: number };
+  lastUpdated: any;
 }
 
 interface Transaction {
   id: string;
-  type: 'deposit' | 'withdraw' | 'transfer' | 'shop';
+  uid: string;
+  type: 'deposit' | 'withdraw' | 'transfer' | 'shop' | 'exchange';
   amount: number;
-  currency: 'pi' | 'usd' | 'dzd';
+  currency: string;
   description: string;
   timestamp: any;
   status: 'completed' | 'pending' | 'failed';
@@ -161,9 +197,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             await setDoc(doc(db, 'wallets', firebaseUser.uid), {
               uid: firebaseUser.uid,
-              pi: 1.25,
-              usd: 0,
-              dzd: 0,
+              balances: {
+                PI: 1.25,
+                USD: 0,
+                DZD: 0,
+                BTC: 0,
+                ETH: 0,
+                BNB: 0,
+                SOL: 0,
+                USDT: 0,
+                ADA: 0,
+                DOT: 0,
+                DOGE: 0,
+                MATIC: 0,
+                AVAX: 0,
+                TRX: 0,
+                LTC: 0
+              },
               lastUpdated: serverTimestamp()
             });
           } else {
@@ -323,13 +373,18 @@ interface Product {
 
 function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
+  const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | null>(null);
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
   const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>('en');
   const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange'>('wallet');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [exchangeFrom, setExchangeFrom] = useState('USD');
+  const [exchangeTo, setExchangeTo] = useState('PI');
+  const [exchangeAmount, setExchangeAmount] = useState<number>(0);
+  const [txCurrency, setTxCurrency] = useState('PI');
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -349,16 +404,16 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Balance', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'GCV Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified' },
-    ar: { balance: 'إجمالي الرصيد', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل GCV', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق' },
-    fr: { balance: 'Solde Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange GCV', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié' },
-    es: { balance: 'Saldo Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio GCV', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado' },
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق' },
+    fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis pour les utilisateurs mondiaux', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié' },
+    es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Actividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido para usuarios globales', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado' },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem i yimseqdac n berra', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel' },
-    ko: { balance: '총 잔액', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: 'GCV 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨' },
-    zh: { balance: '总余额', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: 'GCV 交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证' },
-    ja: { balance: '総残高', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'GCV取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み' },
-    it: { balance: 'Saldo Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio GCV', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato' },
-    pt: { balance: 'Saldo Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca GCV', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado' }
+    ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: '글로벌 사용자를 위한 KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨' },
+    zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '全球用户需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证' },
+    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'グローバルユーザーにはKYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み' },
+    it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto per utenti globali', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato' },
+    pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Atividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário para usuários globais', kycPending: 'KYC pendente', kycVerified: 'KYC verificado' }
   }[lang];
 
   const handleCopyUid = () => {
@@ -369,13 +424,13 @@ function AppContent() {
     }
   };
 
-  const handleTransaction = async (type: string, amount: number, desc: string, recipientUid?: string) => {
+  const handleTransaction = async (type: string, amount: number, desc: string, recipientUid?: string, currency: string = 'PI') => {
     if (!user || !wallet) return;
     setTxLoading(true);
     const path = `wallets/${user.uid}`;
     try {
-      const txAmount = type === 'deposit' ? amount : -amount;
-      if (type !== 'deposit' && wallet.pi < amount) throw new Error("Insufficient funds");
+      const currentBalance = wallet.balances[currency] || 0;
+      if (type !== 'deposit' && currentBalance < amount) throw new Error("Insufficient funds");
 
       // For real transfers, we update both wallets
       if (type === 'transfer' && recipientUid) {
@@ -383,11 +438,13 @@ function AppContent() {
         const recipientWallet = await getDoc(recipientWalletRef);
         if (!recipientWallet.exists()) throw new Error("Recipient wallet not found");
 
-        await updateDoc(recipientWalletRef, { pi: increment(amount) });
+        await updateDoc(recipientWalletRef, {
+          [`balances.${currency}`]: increment(amount)
+        });
       }
 
       await updateDoc(doc(db, 'wallets', user.uid), {
-        pi: increment(txAmount),
+        [`balances.${currency}`]: increment(type === 'deposit' ? amount : -amount),
         lastUpdated: serverTimestamp()
       });
 
@@ -395,8 +452,8 @@ function AppContent() {
         uid: user.uid,
         recipientUid: recipientUid || null,
         type,
-        amount: txAmount,
-        currency: 'pi',
+        amount: type === 'deposit' ? amount : -amount,
+        currency,
         description: desc,
         timestamp: serverTimestamp(),
         status: 'completed'
@@ -409,6 +466,53 @@ function AppContent() {
       }, 2000);
     } catch (e: any) {
       handleFirestoreError(e, OperationType.WRITE, path);
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleExchange = async (fromSymbol: string, toSymbol: string, fromAmount: number) => {
+    if (!user || !wallet) return;
+    
+    const fromPrice = prices[fromSymbol] || 0;
+    const toPrice = prices[toSymbol] || 0;
+    
+    if (fromPrice === 0 || toPrice === 0) {
+      alert("Invalid exchange pair or price not available");
+      return;
+    }
+
+    const toAmount = (fromAmount * fromPrice) / toPrice;
+    const currentFromBalance = wallet.balances[fromSymbol] || 0;
+
+    if (fromAmount > currentFromBalance) {
+      alert("Insufficient balance");
+      return;
+    }
+
+    setTxLoading(true);
+    try {
+      const walletRef = doc(db, 'wallets', user.uid);
+      await updateDoc(walletRef, {
+        [`balances.${fromSymbol}`]: increment(-fromAmount),
+        [`balances.${toSymbol}`]: increment(toAmount),
+        lastUpdated: serverTimestamp()
+      });
+
+      await addDoc(collection(db, 'transactions'), {
+        uid: user.uid,
+        type: 'exchange',
+        amount: fromAmount,
+        currency: fromSymbol,
+        description: `Exchanged ${fromAmount} ${fromSymbol} for ${toAmount.toFixed(6)} ${toSymbol}`,
+        timestamp: serverTimestamp(),
+        status: 'completed'
+      });
+
+      setTxSuccess(true);
+      setTimeout(() => setTxSuccess(false), 2000);
+    } catch (e: any) {
+      alert(e.message);
     } finally {
       setTxLoading(false);
     }
@@ -447,14 +551,15 @@ function AppContent() {
 
   const handleBuyProduct = async (product: Product) => {
     if (!user || !wallet) return;
-    if (wallet.pi < product.price) {
+    const currentPiBalance = wallet.balances['PI'] || 0;
+    if (currentPiBalance < product.price) {
       alert("Insufficient Pi balance");
       return;
     }
     setTxLoading(true);
     try {
       await updateDoc(doc(db, 'wallets', user.uid), {
-        pi: increment(-product.price),
+        'balances.PI': increment(-product.price),
         lastUpdated: serverTimestamp()
       });
 
@@ -462,7 +567,7 @@ function AppContent() {
         uid: user.uid,
         type: 'shop',
         amount: -product.price,
-        currency: 'pi',
+        currency: 'PI',
         description: `Purchased ${product.name}`,
         timestamp: serverTimestamp(),
         status: 'completed'
@@ -480,8 +585,8 @@ function AppContent() {
     }
   };
 
-  const calculateUsd = (pi: number) => (pi * PI_FIXED_PRICE).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-  const calculateDzd = (pi: number) => (pi * PI_FIXED_PRICE * exchangeRates.usd_dzd).toLocaleString('ar-DZ', { style: 'currency', currency: 'DZD' });
+  const calculateUsd = (amount: number, symbol: string = 'PI') => (amount * (prices[symbol] || 0)).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  const calculateDzd = (amount: number, symbol: string = 'PI') => (amount * (prices[symbol] || 0) * exchangeRates.usd_dzd).toLocaleString('ar-DZ', { style: 'currency', currency: 'DZD' });
 
   const handleKycSubmit = async () => {
     if (!user) return;
@@ -512,14 +617,14 @@ function AppContent() {
     try {
       const piAmount = usdAmount / PI_FIXED_PRICE;
       await updateDoc(doc(db, 'wallets', user.uid), {
-        pi: increment(piAmount),
+        'balances.PI': increment(piAmount),
         lastUpdated: serverTimestamp()
       });
       await addDoc(collection(db, 'transactions'), {
         uid: user.uid,
         type: 'deposit',
         amount: piAmount,
-        currency: 'pi',
+        currency: 'PI',
         description: `Bought Pi with ${usdAmount} USD`,
         timestamp: serverTimestamp(),
         status: 'completed'
@@ -574,7 +679,10 @@ function AppContent() {
     );
   }
 
-  const currentBalance = wallet || { pi: 0, usd: 0, dzd: 0 };
+  const currentBalances: Record<string, number> = wallet?.balances || { PI: 0, USD: 0, DZD: 0 };
+  const totalUsdValue = Object.entries(currentBalances).reduce((total, [symbol, amount]) => {
+    return total + (Number(amount) * (prices[symbol] || 0));
+  }, 0);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white font-sans pb-24">
@@ -608,25 +716,47 @@ function AppContent() {
                   <div>
                     <p className="text-slate-900/60 font-medium text-sm uppercase tracking-wider">{t.balance}</p>
                     <h2 className="text-5xl font-black mt-1 flex items-baseline">
-                      {currentBalance.pi.toFixed(4)} <span className="text-2xl ml-2 font-bold">π</span>
+                      ${totalUsdValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </h2>
                   </div>
                   <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10"><Wallet className="w-7 h-7" /></div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
-                    <p className="text-slate-900/60 text-[10px] font-bold uppercase tracking-tighter">USD Value</p>
-                    <p className="text-lg font-bold">{calculateUsd(currentBalance.pi)}</p>
+                    <p className="text-slate-900/60 text-[10px] font-bold uppercase tracking-tighter">Main Asset (PI)</p>
+                    <p className="text-lg font-bold">{(currentBalances['PI'] || 0).toFixed(4)} π</p>
                   </div>
                   <div className="bg-slate-950/10 p-4 rounded-2xl backdrop-blur-sm border border-white/10">
                     <p className="text-slate-900/60 text-[10px] font-bold uppercase tracking-tighter">DZD Value</p>
-                    <p className="text-lg font-bold">{calculateDzd(currentBalance.pi)}</p>
+                    <p className="text-lg font-bold">{(totalUsdValue * exchangeRates.usd_dzd).toLocaleString('ar-DZ', { style: 'currency', currency: 'DZD' })}</p>
                   </div>
                 </div>
               </div>
               <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl" />
               <div className="absolute -left-10 -top-10 w-40 h-40 bg-slate-950/5 rounded-full blur-3xl" />
             </motion.div>
+
+            {/* Assets List */}
+            <section className="space-y-4">
+              <h3 className="text-lg font-bold flex items-center space-x-2"><TrendingUp className="w-5 h-5 text-amber-500" /><span>Your Assets</span></h3>
+              <div className="grid grid-cols-1 gap-3">
+                {Object.entries(currentBalances).filter(([_, amount]) => Number(amount) > 0).map(([symbol, amount]) => (
+                  <motion.div key={symbol} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-slate-900/50 p-4 rounded-3xl border border-slate-800/50 flex justify-between items-center">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center font-black text-amber-500 text-lg">{symbol[0]}</div>
+                      <div>
+                        <p className="font-bold">{symbol}</p>
+                        <p className="text-xs text-slate-500">${(prices[symbol] || 0).toLocaleString()}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black">{Number(amount).toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
+                      <p className="text-xs text-slate-500">${(Number(amount) * (prices[symbol] || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            </section>
 
             {/* Quick Actions */}
             <div className="grid grid-cols-4 gap-4">
@@ -740,13 +870,28 @@ function AppContent() {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="grid grid-cols-1 gap-4">
-              <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center font-black text-amber-500 text-xl">π</div>
-                  <div><p className="font-bold">Pi Network (GCV)</p><p className="text-xs text-slate-500">Global Consensus Value</p></div>
-                </div>
-                <p className="text-xl font-black text-emerald-500">$314,159</p>
+            
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold">Top Cryptocurrencies</h3>
+              <div className="grid grid-cols-1 gap-3">
+                {Object.entries(prices)
+                  .sort((a, b) => Number(b[1]) - Number(a[1]))
+                  .slice(0, 15)
+                  .map(([symbol, price]) => (
+                  <div key={symbol} className="bg-slate-900 p-4 rounded-3xl border border-slate-800 flex justify-between items-center">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center font-black text-slate-400 text-sm">{symbol[0]}</div>
+                      <div>
+                        <p className="font-bold">{symbol}</p>
+                        <p className="text-[10px] text-slate-500 uppercase">{symbol === 'PI' ? 'Consensus Value' : 'Market Price'}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-emerald-500">${Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                      <p className="text-[10px] text-slate-500 uppercase">24h Vol: High</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </section>
@@ -763,7 +908,7 @@ function AppContent() {
                 </div>
                 <div className="space-y-2">
                   <h3 className="text-xl font-bold">{t.kycRequired}</h3>
-                  <p className="text-slate-400 text-sm">External users must verify their identity to buy Pi at GCV rate.</p>
+                  <p className="text-slate-400 text-sm">External users must verify their identity to access the global exchange.</p>
                 </div>
                 {userData?.kycStatus === 'pending' ? (
                   <div className="py-3 px-6 bg-amber-500/20 text-amber-500 rounded-2xl font-bold">
@@ -781,50 +926,83 @@ function AppContent() {
             ) : (
               <div className="space-y-6">
                 <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 space-y-8">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-amber-500/10 rounded-2xl flex items-center justify-center font-black text-amber-500 text-xl">π</div>
-                      <div>
-                        <p className="font-bold">Pi (GCV)</p>
-                        <p className="text-xs text-slate-500">1 Pi = $314,159</p>
+                  <div className="grid grid-cols-1 gap-6">
+                    {/* From Asset */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase px-1">
+                        <span>From</span>
+                        <span>Balance: {(currentBalances[exchangeFrom] || 0).toLocaleString()} {exchangeFrom}</span>
                       </div>
-                    </div>
-                    <TrendingUp className="w-6 h-6 text-emerald-500" />
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold text-slate-500 uppercase">Amount to Spend (USD)</label>
-                      <div className="relative">
+                      <div className="flex space-x-3">
+                        <select 
+                          value={exchangeFrom}
+                          onChange={(e) => setExchangeFrom(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-2xl p-4 font-bold text-amber-500 focus:outline-none focus:border-amber-500"
+                        >
+                          {Object.keys(prices).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
                         <input 
                           type="number" 
-                          placeholder="100" 
-                          className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" 
-                          id="buyUsdAmount"
-                          onChange={(e) => {
-                            const piVal = parseFloat(e.target.value) / PI_FIXED_PRICE;
-                            const display = document.getElementById('piResult');
-                            if (display) display.innerText = piVal.toFixed(8) + ' π';
-                          }}
+                          value={exchangeAmount || ''}
+                          onChange={(e) => setExchangeAmount(parseFloat(e.target.value))}
+                          placeholder="0.00"
+                          className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500"
                         />
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">$</div>
                       </div>
                     </div>
-                    <div className="flex justify-between items-center px-2">
-                      <span className="text-sm text-slate-500">You will receive:</span>
-                      <span className="font-black text-amber-500 text-lg" id="piResult">0.00000000 π</span>
+
+                    {/* Swap Icon */}
+                    <div className="flex justify-center">
+                      <button 
+                        onClick={() => {
+                          const temp = exchangeFrom;
+                          setExchangeFrom(exchangeTo);
+                          setExchangeTo(temp);
+                        }}
+                        className="p-3 bg-slate-800 rounded-full hover:bg-slate-700 transition-colors"
+                      >
+                        <RefreshCw className="w-6 h-6 text-amber-500" />
+                      </button>
+                    </div>
+
+                    {/* To Asset */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center text-xs font-bold text-slate-500 uppercase px-1">
+                        <span>To</span>
+                        <span>Balance: {(currentBalances[exchangeTo] || 0).toLocaleString()} {exchangeTo}</span>
+                      </div>
+                      <div className="flex space-x-3">
+                        <select 
+                          value={exchangeTo}
+                          onChange={(e) => setExchangeTo(e.target.value)}
+                          className="bg-slate-950 border border-slate-800 rounded-2xl p-4 font-bold text-amber-500 focus:outline-none focus:border-amber-500"
+                        >
+                          {Object.keys(prices).map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <div className="flex-1 bg-slate-800 border border-slate-700 rounded-2xl p-4 text-xl font-bold text-slate-400 flex items-center">
+                          {exchangeAmount ? ((exchangeAmount * (prices[exchangeFrom] || 0)) / (prices[exchangeTo] || 1)).toLocaleString(undefined, { maximumFractionDigits: 8 }) : '0.00'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800/50 space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Exchange Rate</span>
+                      <span className="font-bold">1 {exchangeFrom} = {((prices[exchangeFrom] || 0) / (prices[exchangeTo] || 1)).toFixed(8)} {exchangeTo}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-500">Estimated Fee</span>
+                      <span className="text-emerald-500 font-bold">0.00% (Free)</span>
                     </div>
                   </div>
 
                   <button 
-                    onClick={() => {
-                      const amount = parseFloat((document.getElementById('buyUsdAmount') as HTMLInputElement).value);
-                      if (amount > 0) handleBuyPiWithUsd(amount);
-                    }}
-                    disabled={txLoading}
+                    onClick={() => handleExchange(exchangeFrom, exchangeTo, exchangeAmount)}
+                    disabled={txLoading || !exchangeAmount || exchangeAmount <= 0}
                     className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
                   >
-                    {txLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : t.buyPi}
+                    {txLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : 'Confirm Exchange'}
                   </button>
                 </div>
 
@@ -998,24 +1176,40 @@ function AppContent() {
           </div>
         ) : (
           <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">Amount (Pi)</label>
-              <input type="number" placeholder="0.0000" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-2xl font-bold focus:outline-none focus:border-amber-500 transition-colors" id="txAmount" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Currency</label>
+                <select 
+                  value={txCurrency}
+                  onChange={(e) => setTxCurrency(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 font-bold text-amber-500 focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  {Object.keys(currentBalances).map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Amount</label>
+                <input type="number" placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" id="txAmount" />
+              </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase">{activeModal === 'transfer' ? 'Recipient UID' : 'Description'}</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{activeModal === 'transfer' ? 'Recipient UID' : 'Description'}</label>
               <input type="text" placeholder={activeModal === 'transfer' ? 'User UID' : 'Note'} className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 transition-colors" id="txDesc" />
+            </div>
+            <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800/50 flex justify-between text-xs">
+              <span className="text-slate-500">Available Balance</span>
+              <span className="font-bold">{(currentBalances[txCurrency] || 0).toLocaleString()} {txCurrency}</span>
             </div>
             <button 
               disabled={txLoading}
               onClick={() => {
                 const amount = parseFloat((document.getElementById('txAmount') as HTMLInputElement).value);
                 const desc = (document.getElementById('txDesc') as HTMLInputElement).value;
-                if (amount > 0) handleTransaction(activeModal!, amount, desc, activeModal === 'transfer' ? desc : undefined);
+                if (amount > 0) handleTransaction(activeModal!, amount, desc, activeModal === 'transfer' ? desc : undefined, txCurrency);
               }}
-              className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-2xl transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
+              className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
             >
-              {txLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Confirm {activeModal}</span>}
+              {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <span>Confirm {activeModal}</span>}
             </button>
           </div>
         )}
