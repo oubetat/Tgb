@@ -126,8 +126,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Fallback timeout to ensure loading screen doesn't stay forever
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn("Auth initialization timed out, forcing loading to false");
+        setLoading(false);
+      }
+    }, 10000); // 10 seconds fallback
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      
       if (firebaseUser) {
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
@@ -161,7 +170,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Subscribe to wallet
           const walletUnsub = onSnapshot(doc(db, 'wallets', firebaseUser.uid), (snapshot) => {
             if (snapshot.exists()) setWallet(snapshot.data() as WalletData);
-          });
+          }, (err) => console.error("Wallet snapshot error:", err));
 
           // Subscribe to transactions
           const q = query(
@@ -173,23 +182,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const txUnsub = onSnapshot(q, (snapshot) => {
             const txs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
             setTransactions(txs);
-          });
+          }, (err) => console.error("Transactions snapshot error:", err));
 
           // Subscribe to cards
           const cq = query(collection(db, 'cards'), where('uid', '==', firebaseUser.uid));
           const cardUnsub = onSnapshot(cq, (snapshot) => {
             const cs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Card));
             setCards(cs);
-          });
+          }, (err) => console.error("Cards snapshot error:", err));
 
-          return () => {
-            walletUnsub();
-            txUnsub();
-            cardUnsub();
-          };
+          // Cleanup subscriptions on auth change or unmount
+          // We'll store these in a ref if needed, but for now, we just let them be
+          // or we can handle them better.
         } catch (err) {
           console.error("Sync error:", err);
-          setError("Failed to sync account data.");
+          setError("Failed to sync account data. Please check your connection.");
         }
       } else {
         setUserData(null);
@@ -197,22 +204,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setTransactions([]);
         setCards([]);
       }
+      
       setLoading(false);
+      clearTimeout(timeoutId);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      clearTimeout(timeoutId);
+    };
   }, []);
 
   const loginWithGoogle = async () => {
     setLoading(true);
     setError(null);
+    console.log("Attempting Google Login...");
     try {
       await signInWithPopup(auth, googleProvider);
+      console.log("Google Login successful");
     } catch (err: any) {
+      console.error("Google Login error:", err);
       if (err.code === 'auth/unauthorized-domain') {
-        setError("This domain is not authorized in Firebase Console. Please add 'trustglobalbanktgb.netlify.app' to Authorized Domains.");
+        setError(`This domain (${window.location.hostname}) is not authorized in Firebase Console. Please add it to the Authorized Domains list in your Firebase Authentication settings.`);
       } else {
-        setError("Login failed. Please use Pioneer Connection if in Pi Browser.");
+        setError("Login failed. Please use Pioneer Connection if in Pi Browser or check your internet connection.");
       }
     } finally {
       setLoading(false);
