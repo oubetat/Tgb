@@ -1,15 +1,8 @@
 [build]
-  command = "npm run build"
+  command = "npm run build && cp validation-key.txt dist/"
   publish = "dist"
 
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[[headers]]
-  for = "/validation-key.txt"
-  [headers.values]
-    Content-Type = "text/plain; charset=utf-8"
-    Access-Control-Allow-Origin = "*"
-    Cache-Control = "no-cache, no-store, must-revalidate"
