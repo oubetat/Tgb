@@ -79,6 +79,14 @@ service cloud.firestore {
              data.status in ['completed', 'pending', 'failed'];
     }
 
+    function isValidCard(data) {
+      return data.keys().hasAll(['uid', 'cardNumber', 'expiry', 'status']) &&
+             data.uid is string &&
+             data.cardNumber is string &&
+             data.expiry is string &&
+             data.status in ['active', 'pending', 'blocked'];
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -92,13 +100,20 @@ service cloud.firestore {
     match /wallets/{userId} {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated() && isOwner(userId) && isValidWallet(request.resource.data);
-      allow update: if isAdmin() || (isOwner(userId) && isValidWallet(request.resource.data));
+      allow update: if isAdmin() || (isOwner(userId) && isValidWallet(request.resource.data)) || (isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pi']));
     }
 
     match /transactions/{txId} {
-      allow read: if isAuthenticated() && (request.auth.uid == resource.data.uid || isAdmin());
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.uid || request.auth.uid == resource.data.recipientUid || isAdmin());
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.uid && isValidTransaction(request.resource.data);
       allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /cards/{cardId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.uid || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.uid && isValidCard(request.resource.data);
+      allow update: if isAdmin() || (isOwner(resource.data.uid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
       allow delete: if isAdmin();
     }
   }

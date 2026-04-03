@@ -78,6 +78,14 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Trust Global Bank server running at http://localhost:${PORT}`);
+    
+    // Self-ping every 10 minutes to keep Render alive
+    if (process.env.NODE_ENV === "production" && process.env.APP_URL) {
+      setInterval(() => {
+        const url = `${process.env.APP_URL}/api/health`;
+        fetch(url).catch(() => console.log("Self-ping failed, but that's okay."));
+      }, 600000); // 10 minutes
+    }
   });
 }
 

@@ -33,15 +33,30 @@
       "type": "object",
       "properties": {
         "id": { "type": "string", "description": "Unique transaction ID" },
-        "senderUid": { "type": "string", "description": "Sender's UID" },
-        "receiverUid": { "type": "string", "description": "Receiver's UID" },
+        "uid": { "type": "string", "description": "User's UID" },
+        "recipientUid": { "type": "string", "description": "Recipient's UID for transfers" },
         "amount": { "type": "number", "description": "Transaction amount" },
         "currency": { "type": "string", "enum": ["pi", "usd", "dzd"], "description": "Transaction currency" },
-        "type": { "type": "string", "enum": ["deposit", "withdrawal", "transfer", "shop"], "description": "Transaction type" },
+        "type": { "type": "string", "enum": ["deposit", "withdraw", "transfer", "shop"], "description": "Transaction type" },
         "status": { "type": "string", "enum": ["pending", "completed", "failed"], "description": "Transaction status" },
         "timestamp": { "type": "string", "format": "date-time", "description": "When the transaction occurred" }
       },
-      "required": ["id", "senderUid", "amount", "currency", "type", "status", "timestamp"]
+      "required": ["uid", "amount", "currency", "type", "status", "timestamp"]
+    },
+    "Card": {
+      "title": "Virtual Card",
+      "description": "A virtual Visa/Mastercard",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Owner's UID" },
+        "cardNumber": { "type": "string", "description": "Masked card number" },
+        "expiry": { "type": "string", "description": "Expiry date MM/YY" },
+        "cvv": { "type": "string", "description": "CVV code" },
+        "type": { "type": "string", "enum": ["visa", "mastercard"], "description": "Card type" },
+        "status": { "type": "string", "enum": ["active", "pending", "blocked"], "description": "Card status" },
+        "balance": { "type": "number", "description": "Card specific balance in USD" }
+      },
+      "required": ["uid", "cardNumber", "expiry", "status"]
     }
   },
   "firestore": {
@@ -56,6 +71,10 @@
     "/transactions/{transactionId}": {
       "schema": "Transaction",
       "description": "Transaction history"
+    },
+    "/cards/{cardId}": {
+      "schema": "Card",
+      "description": "Virtual card data"
     }
   }
 }
