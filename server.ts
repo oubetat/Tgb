@@ -14,25 +14,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
+  // 1. Pi Network Validation - MUST BE FIRST
+  app.get("/validation-key.txt", (req, res) => {
+    const key = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(key.trim());
+  });
+
   app.set('trust proxy', 1);
   app.use(cors());
   app.use(express.json());
-
-  // Mock database for demonstration if Supabase isn't configured yet
-  // In a real scenario, the user would provide Supabase credentials
-  const mockWallets = {
-    "pioneer-123": { pi: 100.5, usd: 31573.0, dzd: 4200000.0 }
-  };
-
-  // Pi Network Validation Key Route
-  app.get("/validation-key.txt", (req, res) => {
-    console.log(`[Pi Verification] Request from ${req.ip} at ${new Date().toISOString()}`);
-    // Hardcoding the exact key provided by the user to ensure 100% success
-    const validationKey = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
-    res.type("text/plain");
-    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.send(validationKey);
-  });
 
   // API Routes
   app.get("/api/health", (req, res) => {
