@@ -438,7 +438,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (err: any) {
       console.error("Pi Login error details:", err);
-      const errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+      let errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+      
+      if (errorMsg.includes("requested action is invalid")) {
+        errorMsg = "Firebase Auth Error: This domain is not authorized. Please add '" + window.location.hostname + "' to Authorized Domains in Firebase Console.";
+      }
+      
       setError(`Pi Login failed: ${errorMsg}. Falling back to Guest mode...`);
       
       // Fallback to anonymous if Pi fails but we are in Pi Browser
@@ -1024,11 +1029,11 @@ function AppContent() {
               <p>Last updated: April 4, 2026</p>
               <section className="space-y-4">
                 <h2 className="text-xl font-bold text-white">1. Acceptance of Terms</h2>
-                <p>By accessing or using WorldBanksPi, you agree to be bound by these Terms of Service.</p>
+                <p>By accessing or using Trust Global Bank (TGB), you agree to be bound by these Terms of Service.</p>
               </section>
               <section className="space-y-4">
                 <h2 className="text-xl font-bold text-white">2. Description of Service</h2>
-                <p>WorldBanksPi provides a platform for Pi Network users to manage their digital assets, perform transactions, and access financial services.</p>
+                <p>Trust Global Bank provides a platform for Pi Network users to manage their digital assets, perform transactions, and access financial services.</p>
               </section>
               <section className="space-y-4">
                 <h2 className="text-xl font-bold text-white">3. User Responsibilities</h2>
@@ -1036,7 +1041,7 @@ function AppContent() {
               </section>
               <section className="space-y-4">
                 <h2 className="text-xl font-bold text-white">4. Limitation of Liability</h2>
-                <p>WorldBanksPi shall not be liable for any indirect, incidental, special, consequential or punitive damages resulting from your use of the service.</p>
+                <p>Trust Global Bank shall not be liable for any indirect, incidental, special, consequential or punitive damages resulting from your use of the service.</p>
               </section>
             </div>
           </div>
@@ -1078,7 +1083,7 @@ function AppContent() {
               <Shield className="w-16 h-16 text-amber-500" />
             </motion.div>
             <div className="space-y-2">
-              <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent">WorldBanksPi</h1>
+              <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent">Trust Global Bank</h1>
               <p className="text-slate-400 font-medium tracking-widest uppercase text-[10px]">The Future of Global Finance</p>
             </div>
           </div>
@@ -1102,6 +1107,13 @@ function AppContent() {
             </div>
 
             <div className="space-y-4">
+              {authError && (
+                <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl text-rose-500 text-xs font-bold flex items-start space-x-3 animate-shake">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                  <p className="leading-relaxed">{authError}</p>
+                </div>
+              )}
+              
               <button onClick={loginWithPi} className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group">
                 <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
                 <span>Pioneer Connection</span>

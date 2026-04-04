@@ -1,5 +1,6 @@
 {
   "name": "Trust Global Bank",
+  "subtitle": "Secure Pi Banking & Global Exchange",
   "description": "Trust Global Bank (https://trustglobalbanktgb.netlify.app) - A secure encrypted banking application for Pi Network pioneers and global users, featuring real-time exchange rates and Pi SDK integration.",
   "requestFramePermissions": []
 }
