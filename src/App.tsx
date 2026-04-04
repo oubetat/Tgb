@@ -418,7 +418,7 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
           initial={{ opacity: 0, y: 100, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 100, scale: 0.9 }}
-          className="fixed bottom-8 left-4 right-4 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-slate-900 border border-slate-800 rounded-3xl p-6 z-[110] max-w-md mx-auto shadow-2xl"
+          className="fixed bottom-32 left-4 right-4 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-slate-900 border border-slate-800 rounded-3xl p-6 z-[110] max-w-md mx-auto shadow-2xl"
         >
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold">{title}</h3>
@@ -2256,7 +2256,7 @@ function AppContent() {
 
       {/* Bottom Nav */}
       <AnimatePresence>
-        {!activeModal && !showQrModal && (
+        {!showQrModal && (
           <motion.nav 
             initial={{ y: 100 }}
             animate={{ y: 0 }}
@@ -2273,7 +2273,10 @@ function AppContent() {
             ].map((tab) => (
               <button 
                 key={tab.id} 
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => {
+                  setActiveTab(tab.id as any);
+                  setActiveModal(null);
+                }}
                 className={`flex flex-col items-center space-y-1 transition-all ${activeTab === tab.id ? 'text-amber-500 scale-110' : 'text-slate-500'}`}
               >
                 <tab.icon className="w-5 h-5" />
