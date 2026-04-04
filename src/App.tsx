@@ -448,7 +448,8 @@ function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | null>(null);
+  const [kycStep, setKycStep] = useState(1);
   const [selectedPool, setSelectedPool] = useState<InvestmentPool | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
   const [selectedBank, setSelectedBank] = useState<any | null>(null);
@@ -834,28 +835,84 @@ function AppContent() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 font-sans">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md text-center space-y-8">
-          <div className="flex flex-col items-center space-y-4">
-            <div className="p-4 bg-amber-500/10 rounded-full border border-amber-500/20"><Shield className="w-12 h-12 text-amber-500" /></div>
-            <h1 className="text-4xl font-bold tracking-tighter">Trust Global Bank</h1>
-            <p className="text-slate-400">The Future of Encrypted Banking</p>
-          </div>
-          {authError && <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl flex items-center space-x-3 text-rose-500 text-sm"><AlertCircle className="w-5 h-5 flex-shrink-0" /><p>{authError}</p></div>}
-          <div className="space-y-4">
-            <button onClick={loginWithPi} className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex flex-col items-center justify-center space-y-1 transition-all shadow-xl shadow-amber-500/20 active:scale-95">
-              <div className="flex items-center space-x-3"><Globe className="w-6 h-6" /><span>Pioneer Connection</span></div>
-              <span className="text-[10px] opacity-70 font-bold uppercase tracking-widest">Recommended for Pi Browser</span>
-            </button>
-            <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
-              <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-950 px-2 text-slate-500 font-bold">Or</span></div>
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
+        {/* Animated Background Elements */}
+        <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.2, 1],
+              rotate: [0, 90, 0],
+              opacity: [0.1, 0.2, 0.1]
+            }}
+            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+            className="absolute -top-1/2 -left-1/2 w-full h-full bg-gradient-to-br from-amber-500/20 to-transparent rounded-full blur-3xl"
+          />
+          <motion.div 
+            animate={{ 
+              scale: [1, 1.5, 1],
+              rotate: [0, -90, 0],
+              opacity: [0.05, 0.15, 0.05]
+            }}
+            transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
+            className="absolute -bottom-1/2 -right-1/2 w-full h-full bg-gradient-to-tl from-indigo-500/20 to-transparent rounded-full blur-3xl"
+          />
+        </div>
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md text-center space-y-12 relative z-10">
+          <div className="flex flex-col items-center space-y-6">
+            <motion.div 
+              whileHover={{ rotate: 360 }}
+              transition={{ duration: 1 }}
+              className="p-6 bg-slate-900 rounded-[2.5rem] border border-slate-800 shadow-2xl shadow-amber-500/10"
+            >
+              <Shield className="w-16 h-16 text-amber-500" />
+            </motion.div>
+            <div className="space-y-2">
+              <h1 className="text-5xl font-black tracking-tighter bg-gradient-to-b from-white to-slate-500 bg-clip-text text-transparent">WorldBanksPi</h1>
+              <p className="text-slate-400 font-medium tracking-widest uppercase text-[10px]">The Future of Global Finance</p>
             </div>
-            <button onClick={loginWithGoogle} className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-800">
-              <User className="w-5 h-5" /><span>Global User Login</span>
-            </button>
           </div>
-          <p className="text-xs text-slate-500">By connecting, you agree to our Terms of Service and Privacy Policy.</p>
+
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-[3rem] space-y-8 shadow-2xl">
+            <div className="space-y-4">
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Pi Wallet Address</label>
+                <div className="relative">
+                  <input type="text" readOnly value="GD3S...K7L2" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-mono text-slate-400 focus:outline-none" />
+                  <Lock className="w-5 h-5 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+              <div className="space-y-2 text-left">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Nickname</label>
+                <div className="relative">
+                  <input type="text" readOnly value="Pioneer_User" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-bold text-slate-400 focus:outline-none" />
+                  <User className="w-5 h-5 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <button onClick={loginWithPi} className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group">
+                <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
+                <span>Pioneer Connection</span>
+              </button>
+              
+              <button onClick={loginWithGoogle} className="w-full py-4 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-800 group">
+                <div className="p-2 bg-slate-900 rounded-lg group-hover:bg-slate-800 transition-colors">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                </div>
+                <span>Guest Tour</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center space-y-4">
+            <div className="flex items-center space-x-2 text-slate-500">
+              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+              <span className="text-[10px] font-bold uppercase tracking-widest">Secured by Pi Network KYC</span>
+            </div>
+            <p className="text-[10px] text-slate-600 max-w-[250px] leading-relaxed">By connecting, you agree to our <span className="text-slate-400 underline">Terms of Service</span> and <span className="text-slate-400 underline">Privacy Policy</span>.</p>
+          </div>
         </motion.div>
       </div>
     );
@@ -1611,33 +1668,65 @@ function AppContent() {
 
             <div className="space-y-4">
               {userData?.role === 'global' && (
-                <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold">{t.kyc}</h3>
-                    <div className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase ${
-                      userData.kycStatus === 'verified' ? 'bg-emerald-500/20 text-emerald-500' :
-                      userData.kycStatus === 'pending' ? 'bg-amber-500/20 text-amber-500' :
-                      'bg-rose-500/20 text-rose-500'
+                <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 space-y-6 relative overflow-hidden group">
+                  <div className="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
+                  <div className="flex justify-between items-start relative z-10">
+                    <div className="space-y-1">
+                      <h3 className="text-xl font-bold flex items-center space-x-2">
+                        <Shield className="w-5 h-5 text-amber-500" />
+                        <span>Identity Verification</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 font-medium uppercase tracking-widest">KYC Compliance</p>
+                    </div>
+                    <div className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                      userData.kycStatus === 'verified' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
+                      userData.kycStatus === 'pending' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' :
+                      'bg-rose-500/10 text-rose-500 border-rose-500/20'
                     }`}>
                       {userData.kycStatus === 'verified' ? t.kycVerified : 
-                       userData.kycStatus === 'pending' ? t.kycPending : t.kycRequired}
+                       userData.kycStatus === 'pending' ? t.kycPending : 'Unverified'}
                     </div>
                   </div>
                   
-                  {userData.kycStatus === 'none' && (
-                    <div className="space-y-4">
-                      <p className="text-xs text-slate-500">Upload your ID card or Passport to unlock GCV Exchange features.</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <button className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-bold hover:border-amber-500 transition-colors">ID Card</button>
-                        <button className="p-4 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-bold hover:border-amber-500 transition-colors">Passport</button>
+                  {userData.kycStatus === 'none' ? (
+                    <div className="space-y-6 relative z-10">
+                      <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                        <div className="flex items-center space-x-3 text-amber-500">
+                          <AlertCircle className="w-5 h-5" />
+                          <span className="text-xs font-bold uppercase tracking-widest">Action Required</span>
+                        </div>
+                        <p className="text-xs text-slate-400 leading-relaxed">To access high-limit GCV exchange and global remittances, you must complete your identity verification.</p>
                       </div>
                       <button 
-                        onClick={handleKycSubmit}
-                        disabled={txLoading}
-                        className="w-full py-3 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all"
+                        onClick={() => {
+                          setKycStep(1);
+                          setActiveModal('kyc');
+                        }}
+                        className="w-full py-5 bg-amber-500 text-slate-950 font-black text-lg rounded-2xl hover:bg-amber-600 transition-all shadow-xl shadow-amber-500/20 active:scale-95 flex items-center justify-center space-x-3"
                       >
-                        {txLoading ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Submit for Review"}
+                        <Zap className="w-5 h-5" />
+                        <span>Start Verification Wizard</span>
                       </button>
+                    </div>
+                  ) : userData.kycStatus === 'pending' ? (
+                    <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 text-center space-y-4">
+                      <div className="w-12 h-12 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto">
+                        <Loader2 className="w-6 h-6 text-amber-500 animate-spin" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-bold">Verification in Progress</p>
+                        <p className="text-xs text-slate-500 leading-relaxed">Our compliance team is reviewing your documents. This usually takes 5-10 minutes.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-6 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 flex items-center space-x-4">
+                      <div className="p-3 bg-emerald-500 rounded-xl text-white shadow-lg shadow-emerald-500/20">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="font-bold text-emerald-500">Fully Verified Pioneer</p>
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Global Access Unlocked</p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2058,6 +2147,120 @@ function AppContent() {
             >
               {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <span>Submit Application</span>}
             </button>
+          </div>
+        ) : activeModal === 'kyc' ? (
+          <div className="space-y-6">
+            {/* Progress Bar */}
+            <div className="flex justify-between items-center mb-8">
+              {[1, 2, 3].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${kycStep >= step ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>
+                    {kycStep > step ? <CheckCircle2 className="w-5 h-5" /> : step}
+                  </div>
+                  {step < 3 && <div className={`w-12 h-1 transition-colors ${kycStep > step ? 'bg-amber-500' : 'bg-slate-800'}`} />}
+                </div>
+              ))}
+            </div>
+
+            {kycStep === 1 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">Personal Identity</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Step 1 of 3</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Full Legal Name</label>
+                    <input type="text" placeholder="As shown on your ID" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date of Birth</label>
+                      <input type="date" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Country</label>
+                      <select className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 appearance-none">
+                        <option>Algeria</option>
+                        <option>United States</option>
+                        <option>South Korea</option>
+                        <option>United Kingdom</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => setKycStep(2)} className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95">Continue to Documents</button>
+              </motion.div>
+            )}
+
+            {kycStep === 2 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">Document Verification</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Step 2 of 3</p>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {['Passport', 'ID Card', 'Driver License', 'Residence Permit'].map(type => (
+                    <button key={type} className="p-6 bg-slate-800 border border-slate-700 rounded-3xl flex flex-col items-center space-y-3 hover:border-amber-500 transition-colors group">
+                      <div className="p-3 bg-slate-900 rounded-2xl group-hover:bg-amber-500/10 transition-colors">
+                        <CreditCard className="w-6 h-6 text-slate-500 group-hover:text-amber-500" />
+                      </div>
+                      <span className="text-xs font-bold">{type}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="p-8 border-2 border-dashed border-slate-800 rounded-[2.5rem] text-center space-y-4">
+                  <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto">
+                    <ArrowUpRight className="w-8 h-8 text-slate-600" />
+                  </div>
+                  <p className="text-sm font-bold">Upload Document Photo</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Max size: 5MB (JPG, PNG)</p>
+                </div>
+                <div className="flex space-x-4">
+                  <button onClick={() => setKycStep(1)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-2xl border border-slate-700">Back</button>
+                  <button onClick={() => setKycStep(3)} className="flex-1 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95">Continue to Biometrics</button>
+                </div>
+              </motion.div>
+            )}
+
+            {kycStep === 3 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2 text-center">
+                  <h4 className="text-xl font-bold">Biometric Liveness Check</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Final Step</p>
+                </div>
+                <div className="relative aspect-square max-w-[240px] mx-auto">
+                  <div className="absolute inset-0 border-4 border-amber-500/20 rounded-full animate-pulse" />
+                  <div className="absolute inset-4 border-2 border-dashed border-amber-500/40 rounded-full" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <User className="w-24 h-24 text-slate-800" />
+                  </div>
+                  <motion.div 
+                    animate={{ y: [0, 200, 0] }}
+                    transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-amber-500 to-transparent shadow-[0_0_15px_rgba(245,158,11,0.5)]"
+                  />
+                </div>
+                <p className="text-center text-xs text-slate-500 leading-relaxed">Position your face within the frame and ensure good lighting. We will perform a quick 3D liveness scan.</p>
+                <div className="flex space-x-4">
+                  <button onClick={() => setKycStep(2)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-2xl border border-slate-700">Back</button>
+                  <button 
+                    onClick={() => {
+                      setTxLoading(true);
+                      setTimeout(() => {
+                        setTxLoading(false);
+                        setActiveModal(null);
+                        setNotification({ title: 'KYC Submitted', message: 'Your identity verification is being processed. This usually takes 5-10 minutes.' });
+                        setActiveModal('notification');
+                      }, 2000);
+                    }}
+                    className="flex-1 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 flex items-center justify-center space-x-2"
+                  >
+                    {txLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Start Scan</span>}
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </div>
         ) : activeModal === 'bankPortal' ? (
           <div className="space-y-6">
