@@ -234,6 +234,8 @@ interface AuthContextType {
   loginWithPi: () => Promise<void>;
   loginAsGuest: () => void;
   logout: () => Promise<void>;
+  setWallet: React.Dispatch<React.SetStateAction<WalletData | null>>;
+  setTransactions: React.Dispatch<React.SetStateAction<Transaction[]>>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -486,7 +488,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => { await signOut(auth); };
 
   return (
-    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout }}>
+    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
       {children}
     </AuthContext.Provider>
   );
@@ -540,7 +542,7 @@ interface Product {
 }
 
 function AppContent() {
-  const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout } = useAuth();
+  const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | null>(null);
@@ -601,7 +603,7 @@ function AppContent() {
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt', bankDetails: 'Talɣut n lbank', bankName: 'Isem n lbank', accountNumber: 'Uṭṭun n uselmed', swiftCode: 'SWIFT/BIC', stakeAmount: 'Azal n users', stakeDuration: 'Tanzagt (Agguren)', joinPoolConfirm: 'Ddu ɣer ugraw n usfari', poolContribution: 'Asiwel (π)', confirm: 'Sentem', cancel: 'Sefsex' },
     ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: 'KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨', connectedExchanges: '연결된 거래소', globalConnectivity: '글로벌 연결성', connected: '연결됨', disconnected: '연결 끊김', networkStatus: '네트워크 상태', mainnetSettlement: '메인넷 결제', instant: '즉시', finance: '금융', lending: 'P2P 대출', pools: '투자 풀', vault: '개인 금고', partnership: '비즈니스 파트너십', scanQr: 'QR 스캔', metrics: '글로벌 Pi 지표', totalSupply: '총 공급량', circulatingSupply: '유통 공급량', lockedSupply: '잠긴 공급량', activeCountries: '활성 국가', connectedBanks: '연결된 은행', exchangeRates: '글로벌 환율', remittance: '글로벌 송금', gcvValue: '합의 가치 (GCV)', createLending: '대출 요청 생성', loanAmount: '대출 금액 (π)', loanApr: '이자율 (APR %)', loanPurpose: '대출 목적', addBank: '글로벌 은행 추가', executeLoan: '대출 실행', joinPool: '그룹 가입', stakePi: 'Pi 스테이킹', submitProposal: '제안서 제출', comingSoon: '곧 출시 예정', copy: '복사', copied: '복사됨', logout: '로그아웃', settings: '설정', privacy: '개인정보 보호', language: '언어', bankDetails: '은행 상세 정보', bankName: '은행 이름', accountNumber: '계좌 번호', swiftCode: 'SWIFT/BIC', stakeAmount: '스테이킹 금액', stakeDuration: '기간 (개월)', joinPoolConfirm: '투자 풀 가입', poolContribution: '기여도 (π)', confirm: '확인', cancel: '취소' },
     zh: { balance: '总投资组合', actions: '快速操作', market: '市场洞察', activity: '近期活动', deposit: '充值', withdraw: '提现', transfer: '转账', shop: '购物', card: '申请维萨卡', profile: '个人资料', store: '商店', copyUid: '复制 UID', uidCopied: 'UID 已复制!', exchange: '全球交易所', buyPi: '购买 Pi', sellPi: '出售 Pi', kyc: 'KYC 认证', kycRequired: '需要 KYC', kycPending: 'KYC 审核中', kycVerified: 'KYC 已认证', connectedExchanges: '已连接的交易所', globalConnectivity: '全球连接', connected: '已连接', disconnected: '未连接', networkStatus: '网络状态', mainnetSettlement: '主网结算', instant: '即时', finance: '金融', lending: 'P2P 借贷', pools: '投资池', vault: '个人金库', partnership: '商务合作', scanQr: '扫描二维码', metrics: '全球 Pi 指标', totalSupply: '总供应量', circulatingSupply: '流通供应量', lockedSupply: '锁定供应量', activeCountries: '活跃国家', connectedBanks: '连接的银行', exchangeRates: '全球汇率', remittance: '全球汇款', gcvValue: '共识价值 (GCV)', createLending: '创建借贷请求', loanAmount: '借贷金额 (π)', loanApr: '利率 (APR %)', loanPurpose: '借贷用途', addBank: '添加全球银行', executeLoan: '执行借贷', joinPool: '加入小组', stakePi: '质押 Pi 提升排名', submitProposal: '提交商业提案', comingSoon: '即将推出', copy: '复制', copied: '已复制', logout: '退出登录', settings: '设置', privacy: '隐私与安全', language: '语言', bankDetails: '银行详情', bankName: '银行名称', accountNumber: '账号', swiftCode: 'SWIFT/BIC', stakeAmount: '质押金额', stakeDuration: '期限 (月)', joinPoolConfirm: '加入投资池', poolContribution: '贡献 (π)', confirm: '确认', cancel: '取消' },
-    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'KYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み', connectedExchanges: '接続された取引所', globalConnectivity: 'グローバル接続', connected: '接続済み', disconnected: '未接続', networkStatus: 'ネットワークステータス', mainnetSettlement: 'メインネット決済', instant: '即時', finance: '金融', lending: 'P2Pレンディング', pools: '投資プール', vault: '個人用金庫', partnership: 'ビジネスパートナーシップ', scanQr: 'QRスキャン', metrics: 'グローバルPi指標', totalSupply: '総供給量', circulatingSupply: '循環供給量', lockedSupply: 'ロックされた供給量', activeCountries: '活動国', connectedBanks: '接続された銀行', exchangeRates: 'グローバル為替レート', remittance: 'グローバル送金', gcvValue: 'コンセンサス価値 (GCV)', createLending: '貸付リクエストを作成', loanAmount: '貸付金額 (π)', loanApr: '利率 (APR %)', loanPurpose: '貸付目的', addBank: 'グローバル銀行を追加', executeLoan: '貸付を実行', joinPool: 'グループに参加', stakePi: 'Piをステーキング', submitProposal: '提案を提出', comingSoon: '近日公開', copy: 'コピー', copied: 'コピー済み', logout: 'ログアウト', settings: '設定', privacy: 'プライバシー', language: '言語', bankDetails: '銀行詳細', bankName: '銀行名', accountNumber: '口座番号', swiftCode: 'SWIFT/BIC', stakeAmount: 'ステーキング額', stakeDuration: '期間 (ヶ月)', joinPoolConfirm: '投資プールに参加', poolContribution: '拠出額 (π)', confirm: '確認', cancel: 'キャンセル' },
+    ja: { balance: '総ポートフォリオ', actions: 'クイックアクション', market: '市場インサイト', activity: '最近の活動', deposit: '入金', withdraw: '出金', transfer: '送金', shop: 'ショップ', card: 'Visaカードをリクエスト', profile: 'プロフィール', store: 'ストア', copyUid: 'UIDをコピー', uidCopied: 'UIDがコピーされました!', exchange: 'グローバル取引所', buyPi: 'Piを購入', sellPi: 'Piを売却', kyc: 'KYC認証', kycRequired: 'KYCが必要', kycPending: 'KYC審査中', kycVerified: 'KYC認証済み', connectedExchanges: '接続された取引所', globalConnectivity: 'グローバル接続', connected: '接続済み', disconnected: '未接続', networkStatus: 'ネットワークステータス', mainnetSettlement: 'メインネット決済', instant: '即時', finance: '金融', lending: 'P2Pレンディング', pools: '投資プール', vault: '個人用金庫', partnership: 'ビジネスパートナーシップ', scanQr: 'QRスキャン', metrics: 'グローバルPi指標', totalSupply: '総供給量', circulatingSupply: '循環供給量', lockedSupply: 'ロックされた供給量', activeCountries: '活動国', connectedBanks: '接続された銀行', exchangeRates: 'グローバル為替レート', remittance: 'グローバル送금', gcvValue: 'コンセンサス価値 (GCV)', createLending: '貸付リクエストを作成', loanAmount: '貸付金額 (π)', loanApr: '利率 (APR %)', loanPurpose: '貸付目的', addBank: 'グローバル銀行を追加', executeLoan: '貸付を実行', joinPool: 'グループに参加', stakePi: 'Piをステーキング', submitProposal: '提案を提出', comingSoon: '近日公開', copy: 'コピー', copied: 'コピー済み', logout: 'ログアウト', settings: '設定', privacy: 'プライバシー', language: '言語', bankDetails: '銀行詳細', bankName: '銀行名', accountNumber: '口座番号', swiftCode: 'SWIFT/BIC', stakeAmount: 'ステーキング額', stakeDuration: '期間 (ヶ月)', joinPoolConfirm: '投資プールに参加', poolContribution: '拠出額 (π)', confirm: '確認', cancel: 'キャンセル' },
     it: { balance: 'Portafoglio Totale', actions: 'Azioni Rapide', market: 'Mercato', activity: 'Attività Recente', deposit: 'Deposito', withdraw: 'Prelievo', transfer: 'Trasferimento', shop: 'Negozio', card: 'Richiedi Carta Visa', profile: 'Profilo', store: 'Negozio', copyUid: 'Copia UID', uidCopied: 'UID Copiato!', exchange: 'Scambio Globale', buyPi: 'Compra Pi', sellPi: 'Vendi Pi', kyc: 'Verifica KYC', kycRequired: 'KYC richiesto', kycPending: 'KYC in attesa', kycVerified: 'KYC verificato', connectedExchanges: 'Scambi Collegati', globalConnectivity: 'Connettività Globale', connected: 'Collegato', disconnected: 'Scollegato', networkStatus: 'Stato della Rete', mainnetSettlement: 'Regolamento Mainnet', instant: 'Istantaneo', finance: 'Finanza', lending: 'Prestiti P2P', pools: 'Pool di Investimento', vault: 'Caveau Personale', partnership: 'Partnership Commerciale', scanQr: 'Scansiona QR', metrics: 'Metriche Globali Pi', totalSupply: 'Fornitura Totale', circulatingSupply: 'Fornitura Circolante', lockedSupply: 'Fornitura Bloccata', activeCountries: 'Paesi Attivi', connectedBanks: 'Banche Collegate', exchangeRates: 'Tassi di Cambio Globali', remittance: 'Rimesse Globali', gcvValue: 'Valore di Consenso (GCV)', createLending: 'Crea Richiesta di Prestito', loanAmount: 'Importo del Prestito (π)', loanApr: 'Tasso di Interesse (APR %)', loanPurpose: 'Scopo del Prestito', addBank: 'Aggiungi Banca Globale', executeLoan: 'Esegui Prestito', joinPool: 'Unisciti al Gruppo', stakePi: 'Metti in Stake Pi', submitProposal: 'Invia Proposta', comingSoon: 'Prossimamente', copy: 'Copia', copied: 'Copiato', logout: 'Esci', settings: 'Impostazioni', privacy: 'Privacy', language: 'Lingua', bankDetails: 'Dettagli Bancari', bankName: 'Nome Banca', accountNumber: 'Numero Conto', swiftCode: 'Codice SWIFT/BIC', stakeAmount: 'Importo Stake', stakeDuration: 'Durata (Mesi)', joinPoolConfirm: 'Unisciti al Pool di Investimento', poolContribution: 'Contributo (π)', confirm: 'Conferma', cancel: 'Annulla' },
     pt: { balance: 'Portfólio Total', actions: 'Ações Rápidas', market: 'Mercado', activity: 'Actividade Recente', deposit: 'Depósito', withdraw: 'Saque', transfer: 'Transferência', shop: 'Loja', card: 'Solicitar Cartão Visa', profile: 'Perfil', store: 'Loja', copyUid: 'Copiar UID', uidCopied: 'UID Copiado!', exchange: 'Troca Global', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificação KYC', kycRequired: 'KYC necessário', kycPending: 'KYC pendente', kycVerified: 'KYC verificado', connectedExchanges: 'Exchanges Conectadas', globalConnectivity: 'Conectividade Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Status da Rede', mainnetSettlement: 'Liquidação Mainnet', instant: 'Instantâneo', finance: 'Finanças', lending: 'Empréstimos P2P', pools: 'Pools de Investimento', vault: 'Cofre Pessoal', partnership: 'Parceria Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suprimento Total', circulatingSupply: 'Suprimento Circulante', lockedSupply: 'Suprimento Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Taxas de Câmbio Globais', remittance: 'Remessas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Criar Pedido de Empréstimo', loanAmount: 'Valor do Empréstimo (π)', loanApr: 'Taxa de Juros (APR %)', loanPurpose: 'Objetivo do Empréstimo', addBank: 'Adicionar Banco Global', executeLoan: 'Executar Empréstimo', joinPool: 'Participar do Grupo', stakePi: 'Stake Pi para Subir Rank', submitProposal: 'Enviar Proposta', comingSoon: 'Em breve', copy: 'Copiar', copied: 'Copiado', logout: 'Sair', settings: 'Configurações', privacy: 'Privacidade', language: 'Idioma', bankDetails: 'Detalhes Bancários', bankName: 'Nome do Banco', accountNumber: 'Número da Conta', swiftCode: 'Código SWIFT/BIC', stakeAmount: 'Valor de Stake', stakeDuration: 'Duração (Meses)', joinPoolConfirm: 'Participar do Fundo de Investimento', poolContribution: 'Contribuição (π)', confirm: 'Confirmar', cancel: 'Cancelar' }
   }[lang];
@@ -615,8 +617,51 @@ function AppContent() {
   };
 
   const handleTransaction = async (type: string, amount: number, desc: string, recipientUid?: string, currency: string = 'PI') => {
-    if (!user || !wallet) return;
+    if (!wallet) return;
     setTxLoading(true);
+    
+    // Guest Mode Simulation
+    if (!user) {
+      console.log("Simulating guest transaction...");
+      const currentBalance = wallet.balances[currency] || 0;
+      if (type !== 'deposit' && currentBalance < amount) {
+        setNotification({ title: 'Error', message: 'Insufficient funds' });
+        setActiveModal('notification');
+        setTxLoading(false);
+        return;
+      }
+      
+      // Update local wallet state
+      setWallet({
+        ...wallet,
+        balances: {
+          ...wallet.balances,
+          [currency]: (wallet.balances[currency] || 0) + (type === 'deposit' ? amount : -amount)
+        }
+      });
+      
+      // Add to local transactions
+      const newTx: Transaction = {
+        id: "guest_" + Date.now(),
+        uid: "guest",
+        type: type as any,
+        amount: type === 'deposit' ? amount : -amount,
+        currency,
+        description: desc,
+        timestamp: new Date(),
+        status: 'completed'
+      };
+      setTransactions([newTx, ...transactions]);
+      
+      setTxSuccess(true);
+      setTimeout(() => {
+        setTxSuccess(false);
+        setActiveModal(null);
+      }, 2000);
+      setTxLoading(false);
+      return;
+    }
+
     const path = `wallets/${user.uid}`;
     try {
       const currentBalance = wallet.balances[currency] || 0;
