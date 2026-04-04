@@ -239,21 +239,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Fallback timeout to ensure loading screen doesn't stay forever
     const timeoutId = setTimeout(() => {
-      if (loading) {
-        console.warn("Auth initialization timed out, forcing loading to false");
-        setLoading(false);
-      }
-    }, 10000); // 10 seconds fallback
+      console.warn("Auth initialization timed out, forcing loading to false");
+      setLoading(false);
+    }, 15000); // 15 seconds fallback for mobile/slow connections
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("Auth state changed:", firebaseUser?.uid);
       setUser(firebaseUser);
       
       if (firebaseUser) {
+        console.log("User is authenticated, syncing data...");
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
           const userDoc = await getDoc(userDocRef);
+          console.log("User doc exists:", userDoc.exists());
           
           if (!userDoc.exists()) {
+            console.log("Creating new user profile...");
             const newUserData: UserData = {
               uid: firebaseUser.uid,
               email: firebaseUser.email || 'anonymous@tgb.com',
@@ -268,6 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             setUserData(newUserData);
 
+            console.log("Creating initial wallet...");
             await setDoc(doc(db, 'wallets', firebaseUser.uid), {
               uid: firebaseUser.uid,
               balances: {
@@ -293,8 +296,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUserData(userDoc.data() as UserData);
           }
 
+          console.log("Setting up snapshots...");
           // Subscribe to wallet
-          const walletUnsub = onSnapshot(doc(db, 'wallets', firebaseUser.uid), (snapshot) => {
+          onSnapshot(doc(db, 'wallets', firebaseUser.uid), (snapshot) => {
             if (snapshot.exists()) setWallet(snapshot.data() as WalletData);
           }, (err) => console.error("Wallet snapshot error:", err));
 
@@ -305,32 +309,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             orderBy('timestamp', 'desc'),
             limit(10)
           );
-          const txUnsub = onSnapshot(q, (snapshot) => {
+          onSnapshot(q, (snapshot) => {
             const txs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
             setTransactions(txs);
           }, (err) => console.error("Transactions snapshot error:", err));
 
           // Subscribe to cards
           const cq = query(collection(db, 'cards'), where('uid', '==', firebaseUser.uid));
-          const cardUnsub = onSnapshot(cq, (snapshot) => {
+          onSnapshot(cq, (snapshot) => {
             const cs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Card));
             setCards(cs);
           }, (err) => console.error("Cards snapshot error:", err));
 
-          // Cleanup subscriptions on auth change or unmount
-          // We'll store these in a ref if needed, but for now, we just let them be
-          // or we can handle them better.
         } catch (err) {
           console.error("Sync error:", err);
           setError("Failed to sync account data. Please check your connection.");
         }
       } else {
+        console.log("User is not authenticated");
         setUserData(null);
         setWallet(null);
         setTransactions([]);
         setCards([]);
       }
       
+      console.log("Setting loading to false");
       setLoading(false);
       clearTimeout(timeoutId);
     });
@@ -362,27 +365,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loginWithPi = async () => {
     setLoading(true);
+    setError(null);
+    console.log("Attempting Pi Login...");
     try {
       // @ts-ignore
       if (window.Pi) {
+        console.log("Pi SDK found, authenticating...");
         // @ts-ignore
         const piAuth = await window.Pi.authenticate(['payments', 'username'], (payment) => {
-          console.log("Pi Payment", payment);
+          console.log("Incomplete Pi Payment found:", payment);
         });
+        
+        console.log("Pi Auth successful:", piAuth.user.username);
         await signInAnonymously(auth);
+        
         if (auth.currentUser) {
           const userDocRef = doc(db, 'users', auth.currentUser.uid);
           await setDoc(userDocRef, {
+            uid: auth.currentUser.uid,
             displayName: piAuth.user.username,
             role: 'pioneer',
-            piUid: piAuth.user.uid
+            piUid: piAuth.user.uid,
+            kycStatus: 'verified',
+            lastLogin: serverTimestamp()
           }, { merge: true });
+          console.log("Pi User data synced to Firestore");
         }
       } else {
+        console.warn("Pi SDK not found, falling back to anonymous login");
         await signInAnonymously(auth);
       }
-    } catch (err) {
-      await signInAnonymously(auth);
+    } catch (err: any) {
+      console.error("Pi Login error:", err);
+      setError(`Pi Login failed: ${err.message || String(err)}`);
+      // Fallback to anonymous if Pi fails but we are in Pi Browser
+      try { await signInAnonymously(auth); } catch (e) {}
     } finally {
       setLoading(false);
     }
@@ -823,11 +840,22 @@ function AppContent() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-6">
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center space-y-6 p-6">
         <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 5 }} className="text-center space-y-2">
-          <p className="text-amber-500/80 font-bold animate-pulse">Waking up the Bank Vault...</p>
-          <p className="text-slate-500 text-xs">This may take up to 60 seconds on the first visit.</p>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 2 }} className="text-center space-y-6">
+          <div className="space-y-2">
+            <p className="text-amber-500/80 font-bold animate-pulse text-xl">Waking up the Bank Vault...</p>
+            <p className="text-slate-500 text-xs">This may take a moment on the first visit or slow connections.</p>
+          </div>
+          <motion.button 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 10 }}
+            onClick={() => window.location.reload()}
+            className="px-6 py-3 bg-slate-900 border border-slate-800 rounded-2xl text-slate-400 font-bold text-sm hover:text-white transition-colors"
+          >
+            Take too long? Tap to Retry
+          </motion.button>
         </motion.div>
       </div>
     );

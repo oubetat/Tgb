@@ -67,19 +67,17 @@ service cloud.firestore {
     }
 
     function isValidWallet(data) {
-      return data.keys().hasAll(['uid', 'pi', 'usd', 'dzd']) &&
+      return data.keys().hasAll(['uid', 'balances']) &&
              data.uid is string &&
-             data.pi is number &&
-             data.usd is number &&
-             data.dzd is number;
+             data.balances is map;
     }
 
     function isValidTransaction(data) {
       return data.keys().hasAll(['uid', 'type', 'amount', 'currency', 'status', 'timestamp']) &&
              data.uid is string &&
-             data.type in ['deposit', 'withdraw', 'transfer', 'shop'] &&
+             data.type in ['deposit', 'withdraw', 'transfer', 'shop', 'loan', 'repayment', 'stake', 'unstake'] &&
              data.amount is number &&
-             data.currency in ['pi', 'usd', 'dzd'] &&
+             data.currency is string &&
              data.status in ['completed', 'pending', 'failed'];
     }
 

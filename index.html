@@ -6,11 +6,14 @@
     <title>Trust Global Bank</title>
     <script src="https://sdk.minepi.com/pi-sdk.js"></script>
     <script>
+      // Initialize Pi SDK
+      // Sandbox should be false when running in the Pi Browser for production
+      const isPiBrowser = /PiBrowser/i.test(navigator.userAgent);
       window.Pi.init({ 
         version: "2.0", 
-        sandbox: true 
+        sandbox: !isPiBrowser 
       });
-      // Store App ID for reference if needed by other scripts
+      // Store App ID for reference
       window.PI_APP_ID = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
     </script>
   </head>
