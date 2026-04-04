@@ -35,7 +35,7 @@ async function startServer() {
 
   // API Routes
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", env: process.env.NODE_ENV });
+    res.json({ status: "ok", env: process.env.NODE_ENV, piAppId: process.env.PI_APP_ID ? 'Configured' : 'Missing' });
   });
 
   // Test route to verify server is alive
@@ -54,7 +54,11 @@ async function startServer() {
   // Pi Network Payment Approval
   app.post("/api/pi/approve", async (req, res) => {
     const { paymentId } = req.body;
-    const apiKey = process.env.PI_API_KEY || "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm";
+    const apiKey = process.env.PI_API_KEY;
+    
+    if (!apiKey) {
+      return res.status(500).json({ error: "PI_API_KEY not configured in environment variables" });
+    }
     
     try {
       console.log(`[Pi Payment] Approving payment: ${paymentId}`);
@@ -81,7 +85,11 @@ async function startServer() {
   // Pi Network Payment Completion
   app.post("/api/pi/complete", async (req, res) => {
     const { paymentId, txid } = req.body;
-    const apiKey = process.env.PI_API_KEY || "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm";
+    const apiKey = process.env.PI_API_KEY;
+
+    if (!apiKey) {
+      return res.status(500).json({ error: "PI_API_KEY not configured in environment variables" });
+    }
     
     try {
       console.log(`[Pi Payment] Completing payment: ${paymentId} with txid: ${txid}`);
