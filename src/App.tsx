@@ -29,7 +29,8 @@ import {
   QrCode,
   Activity,
   Building2,
-  Plus
+  Plus,
+  Send
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -417,7 +418,7 @@ const Modal = ({ isOpen, onClose, title, children }: { isOpen: boolean, onClose:
           initial={{ opacity: 0, y: 100, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 100, scale: 0.9 }}
-          className="fixed bottom-0 left-0 right-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl p-6 pb-24 sm:pb-6 z-[110] max-w-md w-full shadow-2xl"
+          className="fixed bottom-8 left-4 right-4 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 bg-slate-900 border border-slate-800 rounded-3xl p-6 z-[110] max-w-md mx-auto shadow-2xl"
         >
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-xl font-bold">{title}</h3>
@@ -447,8 +448,10 @@ function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | null>(null);
   const [selectedPool, setSelectedPool] = useState<InvestmentPool | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
+  const [selectedBank, setSelectedBank] = useState<any | null>(null);
   const [notification, setNotification] = useState<{ title: string; message: string }>({ title: '', message: '' });
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
@@ -635,9 +638,14 @@ function AppContent() {
     }
   };
 
-  const handleExecuteLoan = async (loanId: string, amount: number) => {
-    if (!user || !wallet) return;
-    if ((wallet.balances['PI'] || 0) < amount) {
+  const handleExecuteLoan = (loan: any) => {
+    setSelectedLoan(loan);
+    setActiveModal('executeLoan');
+  };
+
+  const confirmExecuteLoan = async () => {
+    if (!user || !wallet || !selectedLoan) return;
+    if ((wallet.balances['PI'] || 0) < selectedLoan.amount) {
       setNotification({ title: 'Error', message: "Insufficient PI balance to fund this loan" });
       setActiveModal('notification');
       return;
@@ -647,25 +655,25 @@ function AppContent() {
     try {
       // In a real app, this would be a complex transaction
       await updateDoc(doc(db, 'wallets', user.uid), {
-        'balances.PI': increment(-amount),
+        'balances.PI': increment(-selectedLoan.amount),
         lastUpdated: serverTimestamp()
       });
 
       await addDoc(collection(db, 'transactions'), {
         uid: user.uid,
         type: 'loan_funding',
-        amount: -amount,
+        amount: -selectedLoan.amount,
         currency: 'PI',
-        description: `Funded P2P Loan #${loanId.slice(0, 8)}`,
+        description: `Funded P2P Loan #${selectedLoan.id.slice(0, 8)}`,
         timestamp: serverTimestamp(),
         status: 'completed'
       });
 
       setTxSuccess(true);
-      setActiveModal('lending'); // Open modal to show success
       setTimeout(() => {
         setTxSuccess(false);
         setActiveModal(null);
+        setSelectedLoan(null);
       }, 2000);
     } catch (e: any) {
       setNotification({ title: 'Error', message: e.message });
@@ -984,14 +992,23 @@ function AppContent() {
             {/* Quick Actions */}
             <div className="grid grid-cols-5 gap-2">
               {[
-                { icon: ArrowDownLeft, label: t.deposit, color: 'bg-emerald-500/10 text-emerald-500', action: () => setActiveModal('deposit') },
-                { icon: ArrowUpRight, label: t.withdraw, color: 'bg-rose-500/10 text-rose-500', action: () => setActiveModal('withdraw') },
-                { icon: RefreshCw, label: t.transfer, color: 'bg-blue-500/10 text-blue-500', action: () => setActiveModal('transfer') },
-                { icon: Globe, label: t.remittance, color: 'bg-indigo-500/10 text-indigo-500', action: () => setActiveTab('finance') },
-                { icon: ShoppingBag, label: t.shop, color: 'bg-amber-500/10 text-amber-500', action: () => setActiveModal('shop') },
+                { icon: Wallet, label: t.vault, color: 'bg-indigo-600 shadow-indigo-500/20', action: () => setActiveModal('stake') },
+                { icon: Send, label: 'Pi Pay', color: 'bg-blue-500 shadow-blue-500/20', action: () => setActiveModal('transfer') },
+                { icon: RefreshCw, label: 'Global Remittance', color: 'bg-emerald-500 shadow-emerald-500/20', action: () => setActiveTab('finance') },
+                { icon: Globe, label: 'Global Community', color: 'bg-purple-500 shadow-purple-500/20', action: () => setActiveModal('partnership') },
+                { icon: ShoppingBag, label: t.shop, color: 'bg-amber-500 shadow-amber-500/20', action: () => setActiveModal('shop') },
               ].map((action, i) => (
-                <motion.button key={action.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.1 }} onClick={action.action} className="flex flex-col items-center space-y-2 group">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 active:scale-90 ${action.color}`}><action.icon className="w-5 h-5" /></div>
+                <motion.button 
+                  key={action.label} 
+                  initial={{ opacity: 0, y: 10 }} 
+                  animate={{ opacity: 1, y: 0 }} 
+                  transition={{ delay: i * 0.1 }} 
+                  onClick={action.action} 
+                  className="flex flex-col items-center space-y-2 group"
+                >
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110 active:scale-90 shadow-lg text-white ${action.color}`}>
+                    <action.icon className="w-7 h-7" />
+                  </div>
                   <span className="text-[8px] font-bold uppercase text-slate-500 text-center leading-tight">{action.label}</span>
                 </motion.button>
               ))}
@@ -1181,10 +1198,20 @@ function AppContent() {
               </h3>
               <div className="grid grid-cols-1 gap-3">
                 {[
-                  { name: 'Chase Bank', country: 'USA', status: 'Connected', icon: '🏦', piValue: 45, usdValue: 14137155 },
-                  { name: 'HSBC', country: 'UK', status: 'Connected', icon: '🏛️', piValue: 30, usdValue: 9424770 }
+                  { name: 'Chase Bank', country: 'USA', status: 'Connected', icon: '🏦', piValue: 45, usdValue: 14137155, url: 'https://www.chase.com' },
+                  { name: 'HSBC', country: 'UK', status: 'Connected', icon: '🏛️', piValue: 30, usdValue: 9424770, url: 'https://www.hsbc.com' },
+                  { name: 'KakaoBank', country: 'KR', status: 'Connected', icon: '🏦', piValue: 25, usdValue: 7853975, url: 'https://www.kakaobank.com' }
                 ].map(bank => (
-                  <div key={bank.name} className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex justify-between items-center">
+                  <motion.div 
+                    key={bank.name} 
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => {
+                      setSelectedBank(bank);
+                      setActiveModal('bankPortal');
+                    }}
+                    className="bg-slate-900 border border-slate-800 rounded-3xl p-5 flex justify-between items-center cursor-pointer hover:border-amber-500/30 transition-all"
+                  >
                     <div className="flex items-center space-x-4">
                       <div className="w-12 h-12 bg-slate-800 rounded-2xl flex items-center justify-center text-2xl">{bank.icon}</div>
                       <div>
@@ -1197,7 +1224,7 @@ function AppContent() {
                       <p className="font-black text-amber-500">{bank.piValue} π</p>
                       <p className="text-[10px] text-slate-500 font-bold">≈ ${bank.usdValue.toLocaleString()}</p>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
                 <button 
                   onClick={handleAddBank}
@@ -1207,6 +1234,21 @@ function AppContent() {
                   <span>{t.addBank}</span>
                 </button>
               </div>
+            </div>
+
+            {/* Pending Applications */}
+            <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-indigo-500 rounded-xl text-white"><FileText className="w-5 h-5" /></div>
+                  <div>
+                    <h4 className="font-bold">Application for Review</h4>
+                    <p className="text-[10px] text-slate-500 uppercase font-black">Status: Pending Verification</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-amber-500/20 text-amber-500 text-[10px] font-bold rounded-full border border-amber-500/20 animate-pulse">In Review</span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">Your application for "Pi Global Savings Community" is currently being reviewed by the TrustBank Global compliance team. This process typically takes 24-48 hours.</p>
             </div>
 
             {/* P2P Lending */}
@@ -1233,7 +1275,7 @@ function AppContent() {
                       <p className="text-lg font-black text-amber-500">{loan.amount} π <span className="text-xs text-slate-400 font-bold">@ {loan.apr}% APR</span></p>
                     </div>
                     <button 
-                      onClick={() => handleExecuteLoan(loan.id, loan.amount)}
+                      onClick={() => handleExecuteLoan(loan)}
                       disabled={txLoading}
                       className="px-4 py-2 bg-amber-500 text-slate-950 font-bold rounded-xl hover:bg-amber-600 transition-all text-sm disabled:opacity-50"
                     >
@@ -1246,10 +1288,19 @@ function AppContent() {
 
             {/* Investment Pools */}
             <div className="space-y-4">
-              <h3 className="text-lg font-bold flex items-center space-x-2">
-                <Activity className="w-5 h-5 text-amber-500" />
-                <span>{t.pools}</span>
-              </h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-bold flex items-center space-x-2">
+                  <Activity className="w-5 h-5 text-amber-500" />
+                  <span>{t.pools}</span>
+                </h3>
+                <button 
+                  onClick={() => setActiveModal('groupApp')}
+                  className="px-4 py-2 bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 rounded-xl text-xs font-bold flex items-center space-x-2 hover:bg-indigo-500/20 transition-all"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>Group Application</span>
+                </button>
+              </div>
               <div className="grid grid-cols-1 gap-4">
                 {pools.map(pool => (
                   <div key={pool.id} className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden">
@@ -1782,12 +1833,28 @@ function AppContent() {
             {selectedPool && (
               <div className="space-y-6">
                 <div className="flex items-center space-x-4">
-                  <img src={selectedPool.image} className="w-16 h-16 rounded-2xl object-cover" referrerPolicy="no-referrer" />
+                  <img src={selectedPool.image} className="w-20 h-20 rounded-3xl object-cover shadow-2xl" referrerPolicy="no-referrer" />
                   <div>
-                    <h3 className="font-bold text-lg">{selectedPool.name}</h3>
-                    <p className="text-xs text-slate-500 uppercase tracking-widest">{selectedPool.category}</p>
+                    <h3 className="font-bold text-xl">{selectedPool.name}</h3>
+                    <p className="text-xs text-amber-500 font-black uppercase tracking-widest">{selectedPool.category}</p>
                   </div>
                 </div>
+                
+                <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 space-y-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">Target Goal</span>
+                    <span className="font-bold">2,000 π</span>
+                  </div>
+                  <div className="w-full bg-slate-950 h-3 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: '62.5%' }}
+                      className="h-full bg-amber-500"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-500 text-center">1,250 π contributed by 125 members</p>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.poolContribution}</label>
                   <input type="number" placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" id="poolAmount" />
@@ -1813,9 +1880,9 @@ function AppContent() {
                       setActiveModal('notification');
                     }
                   }}
-                  className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+                  className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
                 >
-                  {txLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : t.confirm}
+                  {txLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : t.confirm}
                 </button>
               </div>
             )}
@@ -1912,6 +1979,130 @@ function AppContent() {
             <button onClick={handleRequestCard} disabled={txLoading} className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl transition-all active:scale-95 disabled:opacity-50">
               {txLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : "Request Virtual Card"}
             </button>
+          </div>
+        ) : activeModal === 'executeLoan' ? (
+          <div className="space-y-6">
+            <div className="bg-slate-800/50 p-6 rounded-3xl border border-slate-700 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">{t.loanAmount}</span>
+                <span className="text-xl font-black text-amber-500">{selectedLoan?.amount} π</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">{t.loanApr}</span>
+                <span className="text-lg font-bold text-emerald-500">{selectedLoan?.apr}% APR</span>
+              </div>
+              <div className="pt-4 border-t border-slate-700">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Loan Agreement</p>
+                <div className="bg-slate-950 p-4 rounded-xl text-[10px] text-slate-400 leading-relaxed h-32 overflow-y-auto font-mono">
+                  This Peer-to-Peer Loan Agreement is entered into between the Lender and the Borrower ({selectedLoan?.user}). 
+                  The Lender agrees to provide a loan of {selectedLoan?.amount} π at an annual interest rate of {selectedLoan?.apr}%. 
+                  Repayment is subject to the terms of the TrustBank Global smart contract. 
+                  By confirming, you authorize the immediate transfer of funds from your Pi Wallet.
+                </div>
+              </div>
+            </div>
+            <button 
+              onClick={confirmExecuteLoan} 
+              disabled={txLoading} 
+              className="w-full py-5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl transition-all shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2"
+            >
+              {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <span>Sign & Execute Loan</span>}
+            </button>
+          </div>
+        ) : activeModal === 'groupApp' ? (
+          <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Group Name</label>
+                <input type="text" placeholder="e.g. Pi Global Savings Community" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 transition-colors" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Group Goal/Purpose</label>
+                <select className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 transition-colors appearance-none">
+                  <option>House Purchase Fund</option>
+                  <option>Business Startup</option>
+                  <option>Education Savings</option>
+                  <option>Community Project</option>
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Target Amount (π)</label>
+                  <input type="number" placeholder="50000" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 transition-colors" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Period</label>
+                  <select className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500 transition-colors appearance-none">
+                    <option>6 Months</option>
+                    <option>12 Months</option>
+                    <option>24 Months</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Payout/Withdrawal Plan</label>
+                <textarea placeholder="Briefly describe the plan..." className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 h-24 focus:outline-none focus:border-amber-500 transition-colors resize-none" />
+              </div>
+            </div>
+            <button 
+              onClick={() => {
+                setTxLoading(true);
+                setTimeout(() => {
+                  setTxLoading(false);
+                  setActiveModal(null);
+                  setNotification({ title: 'Success', message: 'Group application submitted for review' });
+                  setActiveModal('notification');
+                }, 1500);
+              }}
+              className="w-full py-5 bg-indigo-500 hover:bg-indigo-600 text-white font-black text-xl rounded-2xl transition-all shadow-xl shadow-indigo-500/20 active:scale-95 flex items-center justify-center space-x-2"
+            >
+              {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <span>Submit Application</span>}
+            </button>
+          </div>
+        ) : activeModal === 'bankPortal' ? (
+          <div className="space-y-6">
+            <div className="flex items-center space-x-4 p-4 bg-slate-800 rounded-3xl border border-slate-700">
+              <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center text-3xl">{selectedBank?.icon}</div>
+              <div>
+                <h3 className="text-xl font-bold">{selectedBank?.name}</h3>
+                <p className="text-sm text-slate-500">{selectedBank?.country} Portal</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 text-center">
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Connected Balance</p>
+                <p className="text-lg font-black text-amber-500">{selectedBank?.piValue} π</p>
+              </div>
+              <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800 text-center">
+                <p className="text-[10px] text-slate-500 uppercase font-bold">Fiat Value</p>
+                <p className="text-lg font-black text-emerald-500">${(selectedBank?.usdValue / 1000000).toFixed(1)}M</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button className="w-full p-4 bg-slate-800 hover:bg-slate-700 rounded-2xl flex items-center justify-between transition-all group">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-amber-500/10 rounded-xl text-amber-500"><Wallet className="w-5 h-5" /></div>
+                  <span className="font-bold text-sm">View Bank Statement</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-white" />
+              </button>
+              <button className="w-full p-4 bg-slate-800 hover:bg-slate-700 rounded-2xl flex items-center justify-between transition-all group">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-emerald-500/10 rounded-xl text-emerald-500"><RefreshCw className="w-5 h-5" /></div>
+                  <span className="font-bold text-sm">Instant Remittance</span>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-white" />
+              </button>
+              <button 
+                onClick={() => window.open(selectedBank?.url, '_blank')}
+                className="w-full p-4 bg-amber-500 text-slate-950 rounded-2xl flex items-center justify-center space-x-2 font-black transition-all active:scale-95"
+              >
+                <Globe className="w-5 h-5" />
+                <span>Visit Official Website</span>
+              </button>
+            </div>
           </div>
         ) : activeModal === 'lending' ? (
           <div className="space-y-6">
@@ -2070,7 +2261,7 @@ function AppContent() {
             initial={{ y: 100 }}
             animate={{ y: 0 }}
             exit={{ y: 100 }}
-            className="fixed bottom-0 left-0 right-0 bg-slate-900/80 backdrop-blur-xl border-t border-slate-800 p-4 pb-10 flex justify-around items-center z-50"
+            className="fixed bottom-6 left-4 right-4 bg-slate-900/90 backdrop-blur-xl border border-slate-800 p-4 rounded-2xl flex justify-around items-center z-50 shadow-2xl shadow-black/50"
           >
             {[
               { id: 'wallet', icon: Wallet, label: t.balance },
