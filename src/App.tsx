@@ -874,6 +874,73 @@ function AppContent() {
 
   const handleBuyProduct = async (product: Product) => {
     if (!user || !wallet) return;
+    
+    // If we are in Pi Browser, try real Pi payment
+    const isPiBrowser = /PiBrowser/i.test(navigator.userAgent);
+    if (isPiBrowser && (window as any).Pi) {
+      try {
+        setTxLoading(true);
+        const payment = await (window as any).Pi.createPayment({
+          amount: product.price,
+          memo: `Purchased ${product.name} via TGB Store`,
+          metadata: { productId: product.id, type: 'shop' }
+        }, {
+          onReadyForServerApproval: async (paymentId: string) => {
+            console.log("Payment ready for server approval:", paymentId);
+            await fetch('/api/pi/approve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentId })
+            });
+          },
+          onReadyForServerCompletion: async (paymentId: string, txid: string) => {
+            console.log("Payment ready for server completion:", paymentId, txid);
+            await fetch('/api/pi/complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentId, txid })
+            });
+            
+            // Update local Firestore after successful blockchain payment
+            await updateDoc(doc(db, 'wallets', user.uid), {
+              'balances.PI': increment(product.price), // In a real shop we might add items, but here we just log the tx
+              lastUpdated: serverTimestamp()
+            });
+            await addDoc(collection(db, 'transactions'), {
+              uid: user.uid,
+              type: 'shop',
+              amount: -product.price,
+              currency: 'PI',
+              description: `Purchased ${product.name} (Blockchain)`,
+              txid: txid,
+              timestamp: serverTimestamp(),
+              status: 'completed'
+            });
+            
+            setTxSuccess(true);
+            setTimeout(() => {
+              setTxSuccess(false);
+              setActiveModal(null);
+            }, 2000);
+          },
+          onCancel: (paymentId: string) => {
+            console.log("Payment cancelled:", paymentId);
+            setTxLoading(false);
+          },
+          onError: (error: Error, paymentId?: string) => {
+            console.error("Payment error:", error, paymentId);
+            alert(`Payment error: ${error.message}`);
+            setTxLoading(false);
+          }
+        });
+        return;
+      } catch (e: any) {
+        console.error("Pi Payment creation error:", e);
+        setTxLoading(false);
+      }
+    }
+
+    // Fallback for non-Pi browser or guest mode
     const currentPiBalance = wallet.balances['PI'] || 0;
     if (currentPiBalance < product.price) {
       alert("Insufficient Pi balance");
@@ -881,20 +948,37 @@ function AppContent() {
     }
     setTxLoading(true);
     try {
-      await updateDoc(doc(db, 'wallets', user.uid), {
-        'balances.PI': increment(-product.price),
-        lastUpdated: serverTimestamp()
-      });
-
-      await addDoc(collection(db, 'transactions'), {
-        uid: user.uid,
-        type: 'shop',
-        amount: -product.price,
-        currency: 'PI',
-        description: `Purchased ${product.name}`,
-        timestamp: serverTimestamp(),
-        status: 'completed'
-      });
+      if (user.uid !== 'guest-uid') {
+        await updateDoc(doc(db, 'wallets', user.uid), {
+          'balances.PI': increment(-product.price),
+          lastUpdated: serverTimestamp()
+        });
+        await addDoc(collection(db, 'transactions'), {
+          uid: user.uid,
+          type: 'shop',
+          amount: -product.price,
+          currency: 'PI',
+          description: `Purchased ${product.name}`,
+          timestamp: serverTimestamp(),
+          status: 'completed'
+        });
+      } else {
+        // Guest mode local update
+        setWallet(prev => prev ? {
+          ...prev,
+          balances: { ...prev.balances, PI: (prev.balances['PI'] || 0) - product.price }
+        } : null);
+        setTransactions(prev => [{
+          id: Math.random().toString(36).substr(2, 9),
+          uid: 'guest-uid',
+          type: 'shop',
+          amount: -product.price,
+          currency: 'PI',
+          description: `Purchased ${product.name} (Guest)`,
+          timestamp: new Date(),
+          status: 'completed'
+        }, ...prev]);
+      }
 
       setTxSuccess(true);
       setTimeout(() => {
