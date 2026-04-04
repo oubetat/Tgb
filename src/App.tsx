@@ -102,7 +102,12 @@ const useBinancePrices = () => {
   useEffect(() => {
     const fetchPrices = async () => {
       try {
-        const response = await fetch('https://api.binance.com/api/v3/ticker/price');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for Binance
+        
+        const response = await fetch('https://api.binance.com/api/v3/ticker/price', { signal: controller.signal });
+        clearTimeout(timeoutId);
+        
         const data = await response.json();
         const newPrices: { [symbol: string]: number } = { 
           PI: PI_FIXED_PRICE, 
@@ -174,6 +179,8 @@ interface Transaction {
   description: string;
   timestamp: any;
   status: 'completed' | 'pending' | 'failed';
+  txid?: string;
+  paymentId?: string;
 }
 
 interface Card {
@@ -397,9 +404,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // @ts-ignore
       if (window.Pi) {
         console.log("Pi SDK found, authenticating...");
+        
+        // Add a small delay to ensure SDK is fully ready
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // @ts-ignore
         const piAuth = await window.Pi.authenticate(['payments', 'username'], (payment) => {
           console.log("Incomplete Pi Payment found:", payment);
+          // Handle incomplete payment if needed
+        }).catch((err: any) => {
+          console.error("Pi Authentication Promise rejected:", err);
+          throw err;
         });
         
         console.log("Pi Auth successful:", piAuth.user.username);
@@ -422,14 +437,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await withTimeout(signInAnonymously(auth));
       }
     } catch (err: any) {
-      console.error("Pi Login error:", err);
-      setError(`Pi Login failed: ${err.message || String(err)}`);
+      console.error("Pi Login error details:", err);
+      const errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
+      setError(`Pi Login failed: ${errorMsg}. Falling back to Guest mode...`);
+      
       // Fallback to anonymous if Pi fails but we are in Pi Browser
-      try { await signInAnonymously(auth); } catch (e) {}
+      try { 
+        await withTimeout(signInAnonymously(auth)); 
+      } catch (e) {
+        console.error("Fallback anonymous login failed:", e);
+      }
     } finally {
-      // We don't set loading to false here because onAuthStateChanged will handle it
-      // but we add a safety timeout just in case
-      setTimeout(() => setLoading(false), 5000);
+      // Ensure loading is cleared
+      setTimeout(() => setLoading(false), 1000);
     }
   };
 
@@ -881,7 +901,9 @@ function AppContent() {
               type: 'deposit',
               amount: piAmount,
               currency: 'PI',
-              description: `Bought Pi with ${usdAmount} USD (Blockchain Tx: ${txid.slice(0, 8)}...)`,
+              description: `Bought Pi with ${usdAmount} USD`,
+              txid: txid,
+              paymentId: paymentId,
               timestamp: serverTimestamp(),
               status: 'completed'
             });
@@ -1279,7 +1301,21 @@ function AppContent() {
                          tx.type === 'withdraw' ? <ArrowUpRight className="w-5 h-5 text-rose-500" /> :
                          <RefreshCw className="w-5 h-5 text-blue-500" />}
                       </div>
-                      <div><p className="font-bold text-sm capitalize">{tx.type}</p><p className="text-xs text-slate-500">{tx.description}</p></div>
+                      <div>
+                        <p className="font-bold text-sm capitalize">{tx.type}</p>
+                        <p className="text-xs text-slate-500">{tx.description}</p>
+                        {tx.txid && (
+                          <a 
+                            href={`https://minepi.com/blockexplorer/testnet/transaction/${tx.txid}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-amber-500 hover:underline flex items-center mt-1"
+                          >
+                            <Link className="w-3 h-3 mr-1" />
+                            Blockchain: {tx.txid.slice(0, 8)}...
+                          </a>
+                        )}
+                      </div>
                     </div>
                     <div className="text-right">
                       <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-emerald-500' : 'text-white'}`}>{tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(4)} π</p>
