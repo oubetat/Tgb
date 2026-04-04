@@ -227,6 +227,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Helper for Firestore calls with timeout
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 10000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error('Firestore operation timed out')), timeoutMs))
+  ]);
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userData, setUserData] = useState<UserData | null>(null);
@@ -237,21 +245,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log("AuthProvider mounted, setting up auth listener...");
+    
     // Fallback timeout to ensure loading screen doesn't stay forever
     const timeoutId = setTimeout(() => {
-      console.warn("Auth initialization timed out, forcing loading to false");
+      console.warn("Initial Auth initialization timed out, forcing loading to false");
       setLoading(false);
-    }, 15000); // 15 seconds fallback for mobile/slow connections
+    }, 20000); // 20 seconds fallback for mobile/slow connections
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("Auth state changed:", firebaseUser?.uid);
+      console.log("Auth state changed:", firebaseUser?.uid ? `User: ${firebaseUser.uid}` : "No user");
       setUser(firebaseUser);
       
       if (firebaseUser) {
         console.log("User is authenticated, syncing data...");
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDoc(userDocRef);
+          const userDoc = await withTimeout(getDoc(userDocRef));
           console.log("User doc exists:", userDoc.exists());
           
           if (!userDoc.exists()) {
@@ -264,14 +274,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               photoURL: firebaseUser.photoURL || '',
               kycStatus: firebaseUser.isAnonymous ? 'verified' : 'none',
             };
-            await setDoc(userDocRef, {
+            await withTimeout(setDoc(userDocRef, {
               ...newUserData,
               createdAt: serverTimestamp()
-            });
+            }));
             setUserData(newUserData);
 
             console.log("Creating initial wallet...");
-            await setDoc(doc(db, 'wallets', firebaseUser.uid), {
+            await withTimeout(setDoc(doc(db, 'wallets', firebaseUser.uid), {
               uid: firebaseUser.uid,
               balances: {
                 PI: 1.25,
@@ -291,7 +301,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 LTC: 0
               },
               lastUpdated: serverTimestamp()
-            });
+            }));
           } else {
             setUserData(userDoc.data() as UserData);
           }
@@ -299,31 +309,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log("Setting up snapshots...");
           // Subscribe to wallet
           onSnapshot(doc(db, 'wallets', firebaseUser.uid), (snapshot) => {
-            if (snapshot.exists()) setWallet(snapshot.data() as WalletData);
+            if (snapshot.exists()) {
+              console.log("Wallet snapshot received");
+              setWallet(snapshot.data() as WalletData);
+            }
           }, (err) => console.error("Wallet snapshot error:", err));
 
           // Subscribe to transactions
           const q = query(
             collection(db, 'transactions'),
             where('uid', '==', firebaseUser.uid),
-            orderBy('timestamp', 'desc'),
+            // Temporarily removed orderBy to avoid index issues during debug
             limit(10)
           );
           onSnapshot(q, (snapshot) => {
+            console.log("Transactions snapshot received:", snapshot.size);
             const txs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+            // Sort manually if needed
+            txs.sort((a, b) => {
+              const t1 = (a.timestamp as any)?.seconds || 0;
+              const t2 = (b.timestamp as any)?.seconds || 0;
+              return t2 - t1;
+            });
             setTransactions(txs);
           }, (err) => console.error("Transactions snapshot error:", err));
 
           // Subscribe to cards
           const cq = query(collection(db, 'cards'), where('uid', '==', firebaseUser.uid));
           onSnapshot(cq, (snapshot) => {
+            console.log("Cards snapshot received:", snapshot.size);
             const cs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Card));
             setCards(cs);
           }, (err) => console.error("Cards snapshot error:", err));
 
         } catch (err) {
           console.error("Sync error:", err);
-          setError("Failed to sync account data. Please check your connection.");
+          // Don't set error state here to avoid blocking the UI if it's just a transient sync issue
+          // but we still log it.
         }
       } else {
         console.log("User is not authenticated");
@@ -333,7 +355,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCards([]);
       }
       
-      console.log("Setting loading to false");
+      console.log("Finalizing auth state, setting loading to false");
       setLoading(false);
       clearTimeout(timeoutId);
     });
@@ -349,17 +371,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     console.log("Attempting Google Login...");
     try {
-      await signInWithPopup(auth, googleProvider);
+      await withTimeout(signInWithPopup(auth, googleProvider));
       console.log("Google Login successful");
     } catch (err: any) {
       console.error("Google Login error:", err);
       if (err.code === 'auth/unauthorized-domain') {
         setError(`This domain (${window.location.hostname}) is not authorized in Firebase Console. Please add it to the Authorized Domains list in your Firebase Authentication settings.`);
       } else {
-        setError("Login failed. Please use Pioneer Connection if in Pi Browser or check your internet connection.");
+        setError(`Login failed: ${err.message || "Please check your internet connection."}`);
       }
     } finally {
-      setLoading(false);
+      // Safety timeout
+      setTimeout(() => setLoading(false), 5000);
     }
   };
 
@@ -377,23 +400,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         
         console.log("Pi Auth successful:", piAuth.user.username);
-        await signInAnonymously(auth);
+        await withTimeout(signInAnonymously(auth));
         
         if (auth.currentUser) {
           const userDocRef = doc(db, 'users', auth.currentUser.uid);
-          await setDoc(userDocRef, {
+          await withTimeout(setDoc(userDocRef, {
             uid: auth.currentUser.uid,
             displayName: piAuth.user.username,
             role: 'pioneer',
             piUid: piAuth.user.uid,
             kycStatus: 'verified',
             lastLogin: serverTimestamp()
-          }, { merge: true });
+          }, { merge: true }));
           console.log("Pi User data synced to Firestore");
         }
       } else {
         console.warn("Pi SDK not found, falling back to anonymous login");
-        await signInAnonymously(auth);
+        await withTimeout(signInAnonymously(auth));
       }
     } catch (err: any) {
       console.error("Pi Login error:", err);
@@ -401,7 +424,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Fallback to anonymous if Pi fails but we are in Pi Browser
       try { await signInAnonymously(auth); } catch (e) {}
     } finally {
-      setLoading(false);
+      // We don't set loading to false here because onAuthStateChanged will handle it
+      // but we add a safety timeout just in case
+      setTimeout(() => setLoading(false), 5000);
     }
   };
 
