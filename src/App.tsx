@@ -30,7 +30,8 @@ import {
   Activity,
   Building2,
   Plus,
-  Send
+  Send,
+  ArrowLeft
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -74,6 +75,8 @@ import {
 } from 'firebase/firestore';
 
 const PI_FIXED_PRICE = 314159;
+const PI_API_KEY = "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm"; // For backend payment verification (keep secure)
+const PI_WALLET_ADDRESS = "GCGQSI63L76OPFBTGLMXUK6OUIGP53CY5YK56RSQKAY4RVX3YT4677XQ";
 
 const useBinancePrices = () => {
   const [prices, setPrices] = useState<{ [symbol: string]: number }>({ 
@@ -521,6 +524,7 @@ function AppContent() {
     { id: '2', name: 'Real Estate Pool', category: 'Property', totalInvested: 4450, target: 5000, membersCount: 89, image: 'https://picsum.photos/seed/estate/400/400' }
   ]);
   const [showQrModal, setShowQrModal] = useState(false);
+  const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -838,9 +842,74 @@ function AppContent() {
       alert(t.kycRequired);
       return;
     }
+    
+    const piAmount = usdAmount / PI_FIXED_PRICE;
+    
+    // If we are in Pi Browser, try real Pi payment
+    const isPiBrowser = /PiBrowser/i.test(navigator.userAgent);
+    if (isPiBrowser && (window as any).Pi) {
+      try {
+        setTxLoading(true);
+        const payment = await (window as any).Pi.createPayment({
+          amount: piAmount,
+          memo: `Purchase of ${piAmount.toFixed(4)} PI via TGB`,
+          metadata: { usdAmount, type: 'buy_pi' }
+        }, {
+          onReadyForServerApproval: async (paymentId: string) => {
+            console.log("Payment ready for server approval:", paymentId);
+            await fetch('/api/pi/approve', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentId })
+            });
+          },
+          onReadyForServerCompletion: async (paymentId: string, txid: string) => {
+            console.log("Payment ready for server completion:", paymentId, txid);
+            await fetch('/api/pi/complete', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ paymentId, txid })
+            });
+            
+            // Update local Firestore after successful blockchain payment
+            await updateDoc(doc(db, 'wallets', user.uid), {
+              'balances.PI': increment(piAmount),
+              lastUpdated: serverTimestamp()
+            });
+            await addDoc(collection(db, 'transactions'), {
+              uid: user.uid,
+              type: 'deposit',
+              amount: piAmount,
+              currency: 'PI',
+              description: `Bought Pi with ${usdAmount} USD (Blockchain Tx: ${txid.slice(0, 8)}...)`,
+              timestamp: serverTimestamp(),
+              status: 'completed'
+            });
+            setTxSuccess(true);
+            setTimeout(() => setTxSuccess(false), 2000);
+          },
+          onCancel: (paymentId: string) => {
+            console.log("Payment cancelled:", paymentId);
+            setTxLoading(false);
+          },
+          onError: (error: Error, paymentId?: string) => {
+            console.error("Payment error:", error, paymentId);
+            alert(`Payment failed: ${error.message}`);
+            setTxLoading(false);
+          }
+        });
+        console.log("Payment created:", payment);
+      } catch (e: any) {
+        console.error("Pi Payment creation error:", e);
+        alert(e.message);
+        setTxLoading(false);
+      }
+      return;
+    }
+
+    // Fallback for non-Pi browser (demo mode)
     setTxLoading(true);
     try {
-      const piAmount = usdAmount / PI_FIXED_PRICE;
       await updateDoc(doc(db, 'wallets', user.uid), {
         'balances.PI': increment(piAmount),
         lastUpdated: serverTimestamp()
@@ -850,7 +919,7 @@ function AppContent() {
         type: 'deposit',
         amount: piAmount,
         currency: 'PI',
-        description: `Bought Pi with ${usdAmount} USD`,
+        description: `Bought Pi with ${usdAmount} USD (Demo Mode)`,
         timestamp: serverTimestamp(),
         status: 'completed'
       });
@@ -887,6 +956,72 @@ function AppContent() {
   }
 
   if (!user) {
+    if (legalView === 'privacy') {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white p-6 font-sans">
+          <div className="max-w-2xl mx-auto space-y-8 py-12">
+            <button onClick={() => setLegalView(null)} className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Login</span>
+            </button>
+            <h1 className="text-4xl font-black tracking-tight">Privacy Policy</h1>
+            <div className="space-y-6 text-slate-400 leading-relaxed">
+              <p>Last updated: April 4, 2026</p>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">1. Information We Collect</h2>
+                <p>We collect information you provide directly to us, such as your Pi Network username, wallet address, and transaction history within the app.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">2. How We Use Your Information</h2>
+                <p>We use the information we collect to provide, maintain, and improve our services, to process your transactions, and to communicate with you.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">3. Data Security</h2>
+                <p>We take reasonable measures to help protect information about you from loss, theft, misuse and unauthorized access, disclosure, alteration and destruction.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">4. Pi Network Integration</h2>
+                <p>Our app integrates with the Pi Network SDK. Your use of Pi Network features is also subject to the Pi Network Privacy Policy.</p>
+              </section>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (legalView === 'terms') {
+      return (
+        <div className="min-h-screen bg-slate-950 text-white p-6 font-sans">
+          <div className="max-w-2xl mx-auto space-y-8 py-12">
+            <button onClick={() => setLegalView(null)} className="flex items-center space-x-2 text-slate-400 hover:text-white transition-colors">
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Login</span>
+            </button>
+            <h1 className="text-4xl font-black tracking-tight">Terms of Service</h1>
+            <div className="space-y-6 text-slate-400 leading-relaxed">
+              <p>Last updated: April 4, 2026</p>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">1. Acceptance of Terms</h2>
+                <p>By accessing or using WorldBanksPi, you agree to be bound by these Terms of Service.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">2. Description of Service</h2>
+                <p>WorldBanksPi provides a platform for Pi Network users to manage their digital assets, perform transactions, and access financial services.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">3. User Responsibilities</h2>
+                <p>You are responsible for maintaining the confidentiality of your account and for all activities that occur under your account.</p>
+              </section>
+              <section className="space-y-4">
+                <h2 className="text-xl font-bold text-white">4. Limitation of Liability</h2>
+                <p>WorldBanksPi shall not be liable for any indirect, incidental, special, consequential or punitive damages resulting from your use of the service.</p>
+              </section>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 font-sans relative overflow-hidden">
         {/* Animated Background Elements */}
@@ -964,7 +1099,12 @@ function AppContent() {
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               <span className="text-[10px] font-bold uppercase tracking-widest">Secured by Pi Network KYC</span>
             </div>
-            <p className="text-[10px] text-slate-600 max-w-[250px] leading-relaxed">By connecting, you agree to our <span className="text-slate-400 underline">Terms of Service</span> and <span className="text-slate-400 underline">Privacy Policy</span>.</p>
+            <p className="text-[10px] text-slate-600 max-w-[250px] leading-relaxed">
+              By connecting, you agree to our{' '}
+              <button onClick={() => setLegalView('terms')} className="text-slate-400 underline hover:text-white transition-colors">Terms of Service</button>
+              {' '}and{' '}
+              <button onClick={() => setLegalView('privacy')} className="text-slate-400 underline hover:text-white transition-colors">Privacy Policy</button>.
+            </p>
           </div>
         </motion.div>
       </div>

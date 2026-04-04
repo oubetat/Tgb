@@ -50,6 +50,62 @@ async function startServer() {
     });
   });
 
+  // Pi Network Payment Approval
+  app.post("/api/pi/approve", async (req, res) => {
+    const { paymentId } = req.body;
+    const apiKey = process.env.PI_API_KEY || "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm";
+    
+    try {
+      console.log(`[Pi Payment] Approving payment: ${paymentId}`);
+      const response = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/approve`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Pi API Error: ${error}`);
+      }
+      
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error(`[Pi Payment] Approval failed: ${error.message}`);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Pi Network Payment Completion
+  app.post("/api/pi/complete", async (req, res) => {
+    const { paymentId, txid } = req.body;
+    const apiKey = process.env.PI_API_KEY || "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm";
+    
+    try {
+      console.log(`[Pi Payment] Completing payment: ${paymentId} with txid: ${txid}`);
+      const response = await fetch(`https://api.minepi.com/v2/payments/${paymentId}/complete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Key ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ txid })
+      });
+      
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Pi API Error: ${error}`);
+      }
+      
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      console.error(`[Pi Payment] Completion failed: ${error.message}`);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   app.post("/api/pay", (req, res) => {
     const { amount, currency, merchantId, userId } = req.body;
     console.log(`Payment request: ${amount} ${currency} to ${merchantId} from ${userId}`);
