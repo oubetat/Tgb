@@ -232,6 +232,7 @@ interface AuthContextType {
   error: string | null;
   loginWithGoogle: () => Promise<void>;
   loginWithPi: () => Promise<void>;
+  loginAsGuest: () => void;
   logout: () => Promise<void>;
 }
 
@@ -440,28 +441,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error("Pi Login error details:", err);
       let errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
       
-      if (errorMsg.includes("requested action is invalid")) {
-        errorMsg = "Firebase Auth Error: This domain is not authorized. Please add '" + window.location.hostname + "' to Authorized Domains in Firebase Console.";
+      if (errorMsg.includes("requested action is invalid") || errorMsg.includes("admin-restricted-operation")) {
+        errorMsg = "Firebase Security Restriction: This is usually caused by 'Email enumeration protection' in Firebase Console. Please ensure it is turned OFF in Authentication > Settings > User actions.";
       }
       
-      setError(`Pi Login failed: ${errorMsg}. Falling back to Guest mode...`);
+      setError(`Pi Login failed: ${errorMsg}`);
       
-      // Fallback to anonymous if Pi fails but we are in Pi Browser
-      try { 
-        await withTimeout(signInAnonymously(auth)); 
-      } catch (e) {
-        console.error("Fallback anonymous login failed:", e);
-      }
+      // Fallback to local guest mode if Firebase is restricted
+      console.log("Setting up local guest mode due to Firebase restriction...");
+      setUserData({
+        uid: "guest_" + Math.random().toString(36).substring(7),
+        email: "guest@tgb.com",
+        displayName: "Guest Pioneer",
+        role: "pioneer",
+        kycStatus: "verified"
+      });
+      setWallet({
+        uid: "guest",
+        balances: { PI: 1.25, USD: 0, DZD: 0 },
+        lastUpdated: new Date()
+      });
+      setLoading(false);
     } finally {
       // Ensure loading is cleared
       setTimeout(() => setLoading(false), 1000);
     }
   };
 
+  const loginAsGuest = () => {
+    setUserData({
+      uid: "guest_" + Math.random().toString(36).substring(7),
+      email: "guest@tgb.com",
+      displayName: "Guest Explorer",
+      role: "pioneer",
+      kycStatus: "verified"
+    });
+    setWallet({
+      uid: "guest",
+      balances: { PI: 100, USD: 500, DZD: 75000 },
+      lastUpdated: new Date()
+    });
+  };
+
   const logout = async () => { await signOut(auth); };
 
   return (
-    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, loading, error, loginWithGoogle, loginWithPi, logout }}>
+    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -515,7 +540,7 @@ interface Product {
 }
 
 function AppContent() {
-  const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, logout } = useAuth();
+  const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | null>(null);
@@ -982,7 +1007,7 @@ function AppContent() {
     );
   }
 
-  if (!user) {
+  if (!user && !userData) {
     if (legalView === 'privacy') {
       return (
         <div className="min-h-screen bg-slate-950 text-white p-6 font-sans">
@@ -1108,18 +1133,36 @@ function AppContent() {
 
             <div className="space-y-4">
               {authError && (
-                <div className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl text-rose-500 text-xs font-bold flex items-start space-x-3 animate-shake">
-                  <AlertCircle className="w-5 h-5 flex-shrink-0" />
-                  <p className="leading-relaxed">{authError}</p>
-                </div>
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-rose-500/10 border border-rose-500/20 p-4 rounded-2xl text-rose-500 text-xs font-bold flex flex-col gap-3 animate-shake"
+                >
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                    <p className="leading-relaxed">{authError}</p>
+                  </div>
+                  <button 
+                    onClick={() => window.location.reload()}
+                    className="text-[10px] uppercase tracking-widest bg-rose-500 text-white py-2 px-4 rounded-xl hover:bg-rose-600 transition-colors w-fit mx-auto"
+                  >
+                    Refresh Page
+                  </button>
+                </motion.div>
               )}
               
-              <button onClick={loginWithPi} className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group">
+              <button 
+                onClick={loginWithPi} 
+                className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
+              >
                 <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
                 <span>Pioneer Connection</span>
               </button>
               
-              <button onClick={loginWithGoogle} className="w-full py-4 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-800 group">
+              <button 
+                onClick={loginAsGuest} 
+                className="w-full py-4 bg-slate-950 hover:bg-slate-900 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 border border-slate-800 group"
+              >
                 <div className="p-2 bg-slate-900 rounded-lg group-hover:bg-slate-800 transition-colors">
                   <Zap className="w-4 h-4 text-amber-500" />
                 </div>
