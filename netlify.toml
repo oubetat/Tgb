@@ -1,8 +1,15 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
+# Firebase configuration
+VITE_FIREBASE_API_KEY=your_firebase_api_key
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+VITE_FIREBASE_APP_ID=your_firebase_app_id
+VITE_FIREBASE_MEASUREMENT_ID=your_measurement_id
 
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
+# Pi Network configuration
+VITE_PI_APP_ID=your_pi_app_id
+VITE_PI_API_KEY=your_pi_api_key
+VITE_PI_VALIDATION_KEY=your_pi_validation_key
+
+# Backend API (Render/Cloud Run)
+VITE_API_BASE_URL=https://your-backend.onrender.com/api
