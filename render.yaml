@@ -4,9 +4,27 @@ services:
     env: node
     plan: free
     buildCommand: npm install && npm run build
-    startCommand: node server.ts
+    startCommand: node dist/server.js
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 3000
+      - key: NODE_VERSION
+        value: 20
+      - key: PI_API_KEY
+        value: your_api_key
+      - key: PI_VALIDATION_KEY
+        value: your_validation_key
+      - key: PI_APP_ID
+        value: your_app_id
+      - key: FIREBASE_API_KEY
+        value: your_firebase_api_key
+      - key: FIREBASE_PROJECT_ID
+        value: your_project_id
+      - key: FIREBASE_AUTH_DOMAIN
+        value: your_project.firebaseapp.com
+      - key: FIREBASE_STORAGE_BUCKET
+        value: your_project.appspot.com
+      - key: FIREBASE_APP_ID
+        value: your_firebase_app_id
