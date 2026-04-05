@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
@@ -134,6 +135,10 @@ async function startServer() {
     }
   });
 
+  console.log(`Current Directory: ${process.cwd()}`);
+  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`PORT: ${PORT}`);
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     try {
@@ -149,10 +154,18 @@ async function startServer() {
       console.log("Vite middleware loaded successfully");
     } catch (err) {
       console.error("Vite failed to start:", err);
+      // Fallback to static if build exists
+      const distPath = path.join(process.cwd(), "dist");
+      if (fs.existsSync(distPath)) {
+        app.use(express.static(distPath));
+        app.get("*", (req, res) => {
+          res.sendFile(path.join(distPath, "index.html"));
+        });
+      }
     }
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    if (require('fs').existsSync(distPath)) {
+    if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (req, res) => {
         res.sendFile(path.join(distPath, "index.html"));
