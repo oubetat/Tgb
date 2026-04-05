@@ -71,6 +71,6 @@ async function testConnection() {
     }
   }
 }
-testConnection();
+// testConnection(); // Disabled to avoid startup hangs
 
 export type { FirebaseUser };

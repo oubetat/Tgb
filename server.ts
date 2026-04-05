@@ -26,6 +26,12 @@ async function startServer() {
   app.use(cors());
   app.use(express.json());
 
+  // Request logger
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
+
   // Pi Network Validation Key Route - Standard implementation
   app.get("/validation-key.txt", (req, res) => {
     const key = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
@@ -129,15 +135,16 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  const isProd = process.env.NODE_ENV === "production";
-  console.log(`Starting server in ${isProd ? 'production' : 'development'} mode`);
-
-  if (!isProd) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  if (process.env.NODE_ENV !== "production") {
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (err) {
+      console.error("Vite failed:", err);
+    }
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -147,15 +154,7 @@ async function startServer() {
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Trust Global Bank server running at http://localhost:${PORT}`);
-    
-    // Self-ping every 10 minutes to keep Render alive
-    if (process.env.NODE_ENV === "production" && process.env.APP_URL) {
-      setInterval(() => {
-        const url = `${process.env.APP_URL}/api/health`;
-        fetch(url).catch(() => console.log("Self-ping failed, but that's okay."));
-      }, 600000); // 10 minutes
-    }
+    console.log(`Server running at http://0.0.0.0:${PORT}`);
   });
 }
 
