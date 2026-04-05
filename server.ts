@@ -7,8 +7,16 @@ import cors from "cors";
 
 dotenv.config();
 
+console.log("--- SERVER.TS EXECUTION STARTED ---");
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Mock data for demo purposes
+const mockWallets: Record<string, any> = {
+  "user1": { pi: 100, usd: 500, dzd: 10000 },
+  "user2": { pi: 50, usd: 200, dzd: 5000 }
+};
 
 async function startServer() {
   const app = express();
