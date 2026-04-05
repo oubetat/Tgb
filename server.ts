@@ -138,19 +138,30 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     try {
       const vite = await createViteServer({
-        server: { middlewareMode: true },
+        server: { 
+          middlewareMode: true,
+          host: '0.0.0.0',
+          port: 3000
+        },
         appType: "spa",
       });
       app.use(vite.middlewares);
+      console.log("Vite middleware loaded successfully");
     } catch (err) {
-      console.error("Vite failed:", err);
+      console.error("Vite failed to start:", err);
     }
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
+    if (require('fs').existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get("*", (req, res) => {
+        res.sendFile(path.join(distPath, "index.html"));
+      });
+    } else {
+      app.get("*", (req, res) => {
+        res.status(500).send("Production build missing. Please run build first.");
+      });
+    }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
