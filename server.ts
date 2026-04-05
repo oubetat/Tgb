@@ -26,20 +26,15 @@ async function startServer() {
   // Health check
   app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
-  // Serve static files
+  // Serve static files from dist
   const distPath = path.join(process.cwd(), "dist");
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
     app.get("*", (req, res) =>
       res.sendFile(path.join(distPath, "index.html"))
     );
+  } else {
+    console.error("⚠️ dist folder not found. Did you run `npm run build`?");
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`>>> SERVER IS LIVE ON PORT ${PORT} <<<`);
-  });
-}
-
-startServer().catch((err) => {
-  console.error("CRITICAL SERVER ERROR:", err);
-});
