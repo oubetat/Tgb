@@ -75,7 +75,7 @@ import {
 } from 'firebase/firestore';
 
 const PI_FIXED_PRICE = 314159;
-const PI_API_KEY = "ncbxshhfyy9avdrczi4lxh9sllpt6afhsm6qnjp5tpgsw6n4fsnq6gieym2bcomm"; // For backend payment verification (keep secure)
+const PI_API_KEY = "lktmxygtgiswvcvwevz6tvoxpot9"; // Updated from your image
 const PI_WALLET_ADDRESS = "GCGQSI63L76OPFBTGLMXUK6OUIGP53CY5YK56RSQKAY4RVX3YT4677XQ";
 
 const useBinancePrices = () => {
