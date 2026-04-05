@@ -14,18 +14,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
 
-  // 1. Pi Network Validation - MUST BE ABSOLUTELY FIRST
-  app.get("/validation-key.txt", (req, res) => {
-    const key = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.status(200).send(key.trim());
-    return;
-  });
-
   app.set('trust proxy', 1);
   app.use(cors());
   app.use(express.json());
+
+  // Pi Network Validation Key Route - Standard implementation
+  app.get("/validation-key.txt", (req, res) => {
+    const key = "4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69";
+    res.type('text/plain');
+    res.send(key.trim());
+  });
 
   // API Routes
   app.get("/api/health", (req, res) => {
