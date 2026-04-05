@@ -26,7 +26,7 @@ async function startServer() {
   // Health check
   app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
-  // Serve static files in production
+  // Serve static files
   const distPath = path.join(process.cwd(), "dist");
   if (fs.existsSync(distPath)) {
     app.use(express.static(distPath));
