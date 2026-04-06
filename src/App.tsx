@@ -34,7 +34,11 @@ import {
   ArrowLeft,
   Filter,
   ArrowUpDown,
-  Search
+  Search,
+  UserPlus,
+  ShieldCheck,
+  Calculator,
+  Bell
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -172,6 +176,11 @@ interface UserData {
   photoURL?: string;
   piUid?: string;
   kycStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  notificationSettings?: {
+    transactions: boolean;
+    market: boolean;
+    security: boolean;
+  };
 }
 
 interface WalletData {
@@ -238,6 +247,7 @@ interface AuthContextType {
   wallet: WalletData | null;
   transactions: Transaction[];
   cards: Card[];
+  stakes: any[];
   loading: boolean;
   error: string | null;
   loginWithGoogle: () => Promise<void>;
@@ -264,6 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
+  const [stakes, setStakes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -365,6 +376,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setCards(cs);
           }, (err) => console.error("Cards snapshot error:", err));
 
+          // Subscribe to stakes
+          const sq = query(collection(db, 'stakes'), where('uid', '==', firebaseUser.uid));
+          onSnapshot(sq, (snapshot) => {
+            console.log("Stakes snapshot received:", snapshot.size);
+            const ss = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
+            setStakes(ss);
+          }, (err) => console.error("Stakes snapshot error:", err));
+
         } catch (err) {
           console.error("Sync error:", err);
         }
@@ -374,6 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setWallet(null);
         setTransactions([]);
         setCards([]);
+        setStakes([]);
       }
       
       console.log("Finalizing auth state, setting loading to false");
@@ -407,10 +427,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithPi = async (manualData?: { wallet: string, nickname: string }) => {
+  const loginWithPi = async (manualData?: { wallet: string, nickname: string }, isRegistration: boolean = false) => {
     setLoading(true);
     setError(null);
-    console.log("Attempting Pi Login...", manualData);
+    console.log("Attempting Pi Login...", manualData, isRegistration);
     try {
       // @ts-ignore
       if (window.Pi) {
@@ -437,7 +457,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             displayName: piAuth.user.username,
             role: 'pioneer',
             piUid: piAuth.user.uid,
-            kycStatus: 'verified',
+            kycStatus: isRegistration ? 'pending' : 'verified',
             lastLogin: serverTimestamp()
           }, { merge: true }), 5000);
           console.log("Pi User data synced to Firestore");
@@ -454,7 +474,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             displayName: manualData.nickname,
             role: 'pioneer',
             piUid: manualData.wallet,
-            kycStatus: 'verified',
+            kycStatus: isRegistration ? 'pending' : 'verified',
             lastLogin: serverTimestamp()
           }, { merge: true }), 5000);
           console.log("Manual User data synced to Firestore");
@@ -509,7 +529,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => { await signOut(auth); };
 
   return (
-    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
+    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, stakes, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
       {children}
     </AuthContext.Provider>
   );
@@ -563,7 +583,7 @@ interface Product {
 }
 
 function AppContent() {
-  const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
+  const { user, userData, wallet, transactions, cards, stakes, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [loginWalletAddress, setLoginWalletAddress] = useState('');
@@ -608,6 +628,33 @@ function AppContent() {
   const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
   const [txSearchQuery, setTxSearchQuery] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [stakeAmount, setStakeAmount] = useState<number>(0);
+  const [stakeDuration, setStakeDuration] = useState<number>(6);
+  const [notificationSettings, setNotificationSettings] = useState({
+    transactions: true,
+    market: true,
+    security: true
+  });
+
+  useEffect(() => {
+    if (userData?.notificationSettings) {
+      setNotificationSettings(userData.notificationSettings);
+    }
+  }, [userData]);
+
+  const updateNotificationSettings = async (newSettings: typeof notificationSettings) => {
+    setNotificationSettings(newSettings);
+    if (user) {
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await updateDoc(userDocRef, {
+          notificationSettings: newSettings
+        });
+      } catch (err) {
+        console.error("Failed to update notification settings:", err);
+      }
+    }
+  };
 
   const filteredTransactions = useMemo(() => {
     let result = [...transactions];
@@ -659,8 +706,8 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء' },
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان' },
     fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', exchangeHistory: 'Historique des échanges', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané', finance: 'Finance', lending: 'Prêt P2P', pools: 'Pools d\'Investissement', vault: 'Coffre Personnel', partnership: 'Partenariat Commercial', scanQr: 'Scanner QR', metrics: 'Métriques Globales Pi', totalSupply: 'Offre Totale', circulatingSupply: 'Offre Circulante', lockedSupply: 'Offre Verrouillée', activeCountries: 'Pays Actifs', connectedBanks: 'Banques Connectées', exchangeRates: 'Taux de Change Globaux', remittance: 'Remise Globale', gcvValue: 'Valeur de Consensus (GCV)', createLending: 'Créer une Demande de Prêt', loanAmount: 'Montant du Prêt (π)', loanApr: 'Taux d\'Intérêt (APR %)', loanPurpose: 'But du Prêt', addBank: 'Ajouter une Banque Globale', executeLoan: 'Exécuter le Prêt', joinPool: 'Rejoindre le Groupe', stakePi: 'Staker Pi pour Boost Rank', submitProposal: 'Soumettre une Proposition', comingSoon: 'Fonctionnalité Bientôt', copy: 'Copier', copied: 'Copié', logout: 'Déconnexion', settings: 'Paramètres', privacy: 'Confidentialité', language: 'Langue', bankDetails: 'Détails Bancaires', bankName: 'Nom de la Banque', accountNumber: 'Numéro de Compte', swiftCode: 'Code SWIFT/BIC', stakeAmount: 'Montant du Stake', stakeDuration: 'Durée (Mois)', joinPoolConfirm: 'Rejoindre le Pool d\'Investissement', poolContribution: 'Contribution (π)', confirm: 'Confirmer', cancel: 'Annuler' },
     es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Accividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', exchangeHistory: 'Historial de intercambios', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo', finance: 'Finanzas', lending: 'Préstamos P2P', pools: 'Fondos de Inversión', vault: 'Bóveda Personal', partnership: 'Asociación Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suministro Total', circulatingSupply: 'Suministro Circulante', lockedSupply: 'Suministro Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Tasas de Cambio Globales', remittance: 'Remesas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Crear Solicitud de Préstamo', loanAmount: 'Monto del Préstamo (π)', loanApr: 'Tasa de Interés (APR %)', loanPurpose: 'Propósito del Préstamo', addBank: 'Agregar Banco Global', executeLoan: 'Ejecutar Préstamo', joinPool: 'Unirse al Grupo', stakePi: 'Staker Pi para Subir Rango', submitProposal: 'Enviar Propuesta', comingSoon: 'Próximamente', copy: 'Copiar', copied: 'Copiado', logout: 'Cerrar Sesión', settings: 'Ajustes', privacy: 'Privacidad', language: 'Idioma', bankDetails: 'Detalles Bancarios', bankName: 'Nombre del Banco', accountNumber: 'Número de Cuenta', swiftCode: 'Código SWIFT/BIC', stakeAmount: 'Monto de Stake', stakeDuration: 'Duración (Meses)', joinPoolConfirm: 'Unirse al Fondo de Inversión', poolContribution: 'Contribución (π)', confirm: 'Confirmar', cancel: 'Cancelar' },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', exchangeHistory: 'Amazray n ubeddel', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt', bankDetails: 'Talɣut n lbank', bankName: 'Isem n lbank', accountNumber: 'Uṭṭun n uselmed', swiftCode: 'SWIFT/BIC', stakeAmount: 'Azal n users', stakeDuration: 'Tanzagt (Agguren)', joinPoolConfirm: 'Ddu ɣer ugraw n usfari', poolContribution: 'Asiwel (π)', confirm: 'Sentem', cancel: 'Sefsex' },
@@ -1377,13 +1424,42 @@ function AppContent() {
                     setActiveModal('notification');
                     return;
                   }
-                  // Proceed with login using the manual data
                   await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname });
                 }} 
                 className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
               >
                 <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
                 <span>Pioneer Connection</span>
+              </button>
+
+              <div className="flex items-center space-x-4">
+                <div className="h-px bg-slate-800 flex-1" />
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">OR</span>
+                <div className="h-px bg-slate-800 flex-1" />
+              </div>
+
+              <button 
+                onClick={async () => {
+                  if (!loginWalletAddress || !loginNickname) {
+                    setNotification({ title: 'Required Fields', message: 'Please enter your Pi Wallet Address and Nickname to register.' });
+                    setActiveModal('notification');
+                    return;
+                  }
+                  // Simulation of KYC Activation via Wallet
+                  setNotification({ 
+                    title: 'KYC Activation', 
+                    message: 'Requesting KYC activation via Pi Wallet... Please confirm the request in your Pi Browser if prompted.' 
+                  });
+                  setActiveModal('notification');
+                  
+                  setTimeout(async () => {
+                    await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname }, true);
+                  }, 2000);
+                }} 
+                className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 shadow-lg shadow-indigo-500/20 group"
+              >
+                <UserPlus className="w-5 h-5" />
+                <span>Open New Account & KYC</span>
               </button>
               
               <button 
@@ -1990,27 +2066,125 @@ function AppContent() {
             <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-[2.5rem] p-8 text-slate-950 space-y-6 shadow-2xl shadow-amber-500/20">
               <div className="flex justify-between items-start">
                 <div className="space-y-1">
-                  <h3 className="text-2xl font-black uppercase tracking-tight">{t.vault}</h3>
+                  <h3 className="text-2xl font-black uppercase tracking-tight">{t.staking}</h3>
                   <p className="text-slate-950/60 text-xs font-bold uppercase tracking-widest">High Yield Staking</p>
                 </div>
                 <div className="p-3 bg-slate-950/10 rounded-2xl"><Zap className="w-6 h-6" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-950/10 p-4 rounded-2xl border border-slate-950/5">
-                  <p className="text-[10px] font-bold uppercase opacity-60">Staked Balance</p>
-                  <p className="text-xl font-black">0.00 π</p>
+                  <p className="text-[10px] font-bold uppercase opacity-60">{t.stakedAmount}</p>
+                  <p className="text-xl font-black">{stakes.reduce((acc, s) => acc + (s.amount || 0), 0).toLocaleString()} π</p>
                 </div>
                 <div className="bg-slate-950/10 p-4 rounded-2xl border border-slate-950/5">
-                  <p className="text-[10px] font-bold uppercase opacity-60">Estimated APY</p>
-                  <p className="text-xl font-black">12.0%</p>
+                  <p className="text-[10px] font-bold uppercase opacity-60">{t.estimatedApy}</p>
+                  <p className="text-xl font-black">12.5%</p>
                 </div>
               </div>
               <button 
-                onClick={handleStakePi}
+                onClick={() => setActiveModal('stake')}
                 className="w-full py-4 bg-slate-950 text-white font-bold rounded-2xl hover:bg-slate-900 transition-all shadow-xl"
               >
                 {t.stakePi}
               </button>
+            </div>
+
+            {/* Quick Estimate Calculator */}
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 space-y-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-amber-500/10 rounded-2xl">
+                  <Calculator className="w-6 h-6 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">{t.stakingCalculator}</h3>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Plan your future earnings</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-2">{t.stakeAmount}</label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        value={stakeAmount || ''} 
+                        onChange={(e) => setStakeAmount(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00" 
+                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-lg font-bold focus:outline-none focus:border-amber-500 transition-colors" 
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">π</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-2">{t.stakeDuration}</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[6, 12, 24].map(months => (
+                        <button
+                          key={months}
+                          onClick={() => setStakeDuration(months)}
+                          className={`py-3 rounded-xl text-[10px] font-bold transition-all border ${
+                            stakeDuration === months 
+                              ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' 
+                              : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          {months} {t.months}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-slate-950/50 p-6 rounded-3xl border border-slate-800/50 flex flex-col justify-center space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">{t.potentialEarnings}</span>
+                    <span className="text-emerald-500 font-black text-lg">
+                      +{(stakeAmount * (stakeDuration === 6 ? 0.05 : stakeDuration === 12 ? 0.08 : 0.12) * (stakeDuration / 12)).toFixed(2)} π
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center pt-4 border-t border-slate-800">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">{t.totalReturn}</span>
+                    <span className="text-white font-black text-xl">
+                      {(stakeAmount + (stakeAmount * (stakeDuration === 6 ? 0.05 : stakeDuration === 12 ? 0.08 : 0.12) * (stakeDuration / 12))).toFixed(2)} π
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Staking History */}
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-6 space-y-4">
+              <h4 className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center space-x-2">
+                <Activity className="w-4 h-4" />
+                <span>{t.stakingHistory}</span>
+              </h4>
+              
+              <div className="space-y-3">
+                {stakes.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-4">{t.noStakes}</p>
+                ) : (
+                  stakes.map((stake, idx) => (
+                    <div key={stake.id || idx} className="flex justify-between items-center p-3 bg-slate-950/50 rounded-2xl border border-slate-800/50">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-amber-500/10 rounded-xl flex items-center justify-center">
+                          <Lock className="w-5 h-5 text-amber-500" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">{stake.amount} π</p>
+                          <p className="text-[10px] text-slate-500 uppercase">{stake.duration} {t.months}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-black text-emerald-500 uppercase">Active</p>
+                        <p className="text-[10px] text-slate-500">
+                          {stake.timestamp?.seconds ? new Date(stake.timestamp.seconds * 1000).toLocaleDateString() : 'Just now'}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
 
             {/* Partnership Proposal */}
@@ -2314,8 +2488,7 @@ function AppContent() {
             </div>
 
             <div className="space-y-4">
-              {userData?.role === 'global' && (
-                <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 space-y-6 relative overflow-hidden group">
+              <div className="bg-slate-900 p-8 rounded-[2.5rem] border border-slate-800 space-y-6 relative overflow-hidden group">
                   <div className="absolute -right-10 -top-10 w-40 h-40 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-colors" />
                   <div className="flex justify-between items-start relative z-10">
                     <div className="space-y-1">
@@ -2377,7 +2550,6 @@ function AppContent() {
                     </div>
                   )}
                 </div>
-              )}
 
               <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
                 <div className="flex justify-between items-center">
@@ -2392,6 +2564,46 @@ function AppContent() {
                 </div>
                 <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 break-all font-mono text-xs text-slate-400">
                   {user?.uid}
+                </div>
+              </div>
+
+              <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+                <h3 className="font-bold flex items-center space-x-2">
+                  <Bell className="w-5 h-5 text-amber-500" />
+                  <span>{t.notifications}</span>
+                </h3>
+                <div className="space-y-3">
+                  {[
+                    { id: 'transactions', label: t.transactionAlerts, icon: Wallet },
+                    { id: 'market', label: t.marketAlerts, icon: TrendingUp },
+                    { id: 'security', label: t.securityAlerts, icon: Shield }
+                  ].map((pref) => (
+                    <div key={pref.id} className="flex justify-between items-center p-4 bg-slate-950 border border-slate-800 rounded-2xl">
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-slate-900 rounded-lg text-slate-400">
+                          <pref.icon className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-medium text-slate-300">{pref.label}</span>
+                      </div>
+                      <button 
+                        onClick={() => updateNotificationSettings({
+                          ...notificationSettings,
+                          [pref.id]: !notificationSettings[pref.id as keyof typeof notificationSettings]
+                        })}
+                        className={`w-12 h-6 rounded-full transition-all relative ${
+                          notificationSettings[pref.id as keyof typeof notificationSettings] 
+                            ? 'bg-amber-500' 
+                            : 'bg-slate-800'
+                        }`}
+                      >
+                        <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${
+                          notificationSettings[pref.id as keyof typeof notificationSettings] 
+                            ? 'left-7' 
+                            : 'left-1'
+                        }`} />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -2421,6 +2633,26 @@ function AppContent() {
                       ))}
                     </div>
                   </div>
+
+                  {userData?.kycStatus !== 'verified' && (
+                    <button 
+                      onClick={() => {
+                        setKycStep(1);
+                        setActiveModal('kyc');
+                      }}
+                      className="w-full flex justify-between items-center p-4 bg-amber-500/10 hover:bg-amber-500/20 rounded-2xl transition-all border border-amber-500/20 group"
+                    >
+                      <div className="flex items-center space-x-3 text-amber-500">
+                        <ShieldCheck className="w-5 h-5" />
+                        <span className="font-bold">{t[lang].kyc}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-black uppercase tracking-widest bg-amber-500 text-slate-950 px-2 py-0.5 rounded-full">Required</span>
+                        <ChevronRight className="w-5 h-5 text-amber-500 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </button>
+                  )}
+
                   <button className="w-full flex justify-between items-center p-4 hover:bg-slate-800 rounded-2xl transition-colors">
                     <div className="flex items-center space-x-3 text-slate-400"><Shield className="w-5 h-5" /><span>Privacy & Security</span></div>
                     <ChevronRight className="w-5 h-5 text-slate-600" />
@@ -2522,46 +2754,89 @@ function AppContent() {
         ) : activeModal === 'stake' ? (
           <div className="space-y-6">
             <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20 space-y-2">
-              <p className="text-xs text-amber-500 font-bold uppercase tracking-widest">Staking Rewards</p>
-              <p className="text-sm text-slate-400">Stake your Pi to earn up to 12% APY and boost your global trust rank.</p>
+              <p className="text-xs text-amber-500 font-bold uppercase tracking-widest">{t.stakingCalculator}</p>
+              <p className="text-sm text-slate-400">Estimate your potential rewards before staking your Pi.</p>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.stakeAmount}</label>
-              <input type="number" placeholder="0.00" className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" id="stakeAmount" />
+            
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.stakeAmount}</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    value={stakeAmount || ''} 
+                    onChange={(e) => setStakeAmount(parseFloat(e.target.value) || 0)}
+                    placeholder="0.00" 
+                    className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 text-xl font-bold focus:outline-none focus:border-amber-500 transition-colors" 
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">π</div>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.stakeDuration}</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[6, 12, 24].map(months => (
+                    <button
+                      key={months}
+                      onClick={() => setStakeDuration(months)}
+                      className={`py-3 rounded-xl text-xs font-bold transition-all border ${
+                        stakeDuration === months 
+                          ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-lg shadow-amber-500/20' 
+                          : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {months} {t.months}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Calculator Results */}
+              <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500 font-bold uppercase">{t.estimatedApy}</span>
+                  <span className="text-amber-500 font-black">{stakeDuration === 6 ? '5%' : stakeDuration === 12 ? '8%' : '12%'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-slate-500 font-bold uppercase">{t.potentialEarnings}</span>
+                  <span className="text-emerald-500 font-black">
+                    +{(stakeAmount * (stakeDuration === 6 ? 0.05 : stakeDuration === 12 ? 0.08 : 0.12) * (stakeDuration / 12)).toFixed(2)} π
+                  </span>
+                </div>
+                <div className="pt-4 border-t border-slate-800 flex justify-between items-center">
+                  <span className="text-sm font-bold uppercase">{t.totalReturn}</span>
+                  <span className="text-xl font-black text-white">
+                    {(stakeAmount + (stakeAmount * (stakeDuration === 6 ? 0.05 : stakeDuration === 12 ? 0.08 : 0.12) * (stakeDuration / 12))).toFixed(2)} π
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">{t.stakeDuration}</label>
-              <select className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 font-bold focus:outline-none focus:border-amber-500 transition-colors" id="stakeDuration">
-                <option value="6">6 Months (5% APY)</option>
-                <option value="12">12 Months (8% APY)</option>
-                <option value="24">24 Months (12% APY)</option>
-              </select>
-            </div>
+
             <button 
-              disabled={txLoading}
+              disabled={txLoading || stakeAmount <= 0 || (wallet?.balances['PI'] || 0) < stakeAmount}
               onClick={async () => {
                 if (!user || !wallet) return;
-                const amount = parseFloat((document.getElementById('stakeAmount') as HTMLInputElement).value);
-                const duration = (document.getElementById('stakeDuration') as HTMLSelectElement).value;
-                if (amount > 0 && (wallet.balances['PI'] || 0) >= amount) {
-                  setTxLoading(true);
-                  try {
-                    await updateDoc(doc(db, 'wallets', user.uid), { 'balances.PI': increment(-amount) });
-                    await addDoc(collection(db, 'stakes'), { uid: user.uid, amount, duration, timestamp: serverTimestamp() });
-                    setTxSuccess(true);
-                    setTimeout(() => { setTxSuccess(false); setActiveModal(null); }, 2000);
-                  } catch (e: any) {
-                    setNotification({ title: 'Error', message: e.message });
-                    setActiveModal('notification');
-                  } finally { setTxLoading(false); }
-                } else {
-                  setNotification({ title: 'Error', message: "Insufficient balance" });
+                setTxLoading(true);
+                try {
+                  await updateDoc(doc(db, 'wallets', user.uid), { 'balances.PI': increment(-stakeAmount) });
+                  await addDoc(collection(db, 'stakes'), { 
+                    uid: user.uid, 
+                    amount: stakeAmount, 
+                    duration: stakeDuration, 
+                    apy: stakeDuration === 6 ? 5 : stakeDuration === 12 ? 8 : 12,
+                    timestamp: serverTimestamp() 
+                  });
+                  setTxSuccess(true);
+                  setTimeout(() => { setTxSuccess(false); setActiveModal(null); }, 2000);
+                } catch (e: any) {
+                  setNotification({ title: 'Error', message: e.message });
                   setActiveModal('notification');
-                }
+                } finally { setTxLoading(false); }
               }}
-              className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+              className="w-full py-5 bg-amber-500 text-slate-950 font-black text-lg rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 disabled:opacity-50 transition-all"
             >
-              {txLoading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : t.confirm}
+              {txLoading ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : t.confirm}
             </button>
           </div>
         ) : activeModal === 'pool' ? (
@@ -3144,7 +3419,7 @@ function AppContent() {
 export default function App() {
   useEffect(() => {
     // Force redirect to Netlify for stability on mobile/DNS issues
-    const API_URL = import.meta.env.VITE_API_URL || "https://tgbfinale.netlify.app/";
+    const API_URL = (import.meta as any).env.VITE_API_URL || "https://tgbfinale.netlify.app/";
     
     if (window.location.hostname !== "tgbfinale.netlify.app" && 
         !window.location.hostname.includes("localhost") &&
