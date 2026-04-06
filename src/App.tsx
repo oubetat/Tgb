@@ -555,6 +555,8 @@ function AppContent() {
   const { user, userData, wallet, transactions, cards, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
+  const [loginWalletAddress, setLoginWalletAddress] = useState('');
+  const [loginNickname, setLoginNickname] = useState('');
   const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | null>(null);
   const [kycStep, setKycStep] = useState(1);
   const [selectedPool, setSelectedPool] = useState<InvestmentPool | null>(null);
@@ -1312,14 +1314,26 @@ function AppContent() {
               <div className="space-y-2 text-left">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Pi Wallet Address</label>
                 <div className="relative">
-                  <input type="text" readOnly value="GD3S...K7L2" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-mono text-slate-400 focus:outline-none" />
+                  <input 
+                    type="text" 
+                    value={loginWalletAddress}
+                    onChange={(e) => setLoginWalletAddress(e.target.value)}
+                    placeholder="G... (Your Pi Wallet Address)"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-mono text-white focus:outline-none focus:border-amber-500 transition-colors" 
+                  />
                   <Lock className="w-5 h-5 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
               <div className="space-y-2 text-left">
                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Nickname</label>
                 <div className="relative">
-                  <input type="text" readOnly value="Pioneer_User" className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-bold text-slate-400 focus:outline-none" />
+                  <input 
+                    type="text" 
+                    value={loginNickname}
+                    onChange={(e) => setLoginNickname(e.target.value)}
+                    placeholder="Enter your nickname"
+                    className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-5 pl-12 text-sm font-bold text-white focus:outline-none focus:border-amber-500 transition-colors" 
+                  />
                   <User className="w-5 h-5 text-slate-600 absolute left-4 top-1/2 -translate-y-1/2" />
                 </div>
               </div>
@@ -1346,7 +1360,17 @@ function AppContent() {
               )}
               
               <button 
-                onClick={loginWithPi} 
+                onClick={async () => {
+                  if (!loginWalletAddress || !loginNickname) {
+                    setNotification({ title: 'Required Fields', message: 'Please enter your Pi Wallet Address and Nickname to connect.' });
+                    setActiveModal('notification');
+                    return;
+                  }
+                  // Proceed with login using the manual data
+                  await loginWithPi();
+                  // If loginWithPi succeeds, it will use the SDK or fallback.
+                  // We can also manually update the user profile if needed after login.
+                }} 
                 className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
               >
                 <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
