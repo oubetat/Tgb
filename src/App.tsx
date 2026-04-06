@@ -38,7 +38,9 @@ import {
   UserPlus,
   ShieldCheck,
   Calculator,
-  Bell
+  Bell,
+  UserCheck,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -176,6 +178,11 @@ interface UserData {
   photoURL?: string;
   piUid?: string;
   kycStatus?: 'none' | 'pending' | 'verified' | 'rejected';
+  firstName?: string;
+  lastName?: string;
+  dob?: string;
+  docType?: string;
+  passphrase?: string;
   notificationSettings?: {
     transactions: boolean;
     market: boolean;
@@ -443,8 +450,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithPi = async (manualData?: { wallet: string, nickname: string }, isRegistration: boolean = false) => {
-    console.log("loginWithPi called", { manualData, isRegistration });
+  const loginWithPi = async (
+    manualData?: { wallet: string, nickname: string }, 
+    isRegistration: boolean = false,
+    regDetails?: { firstName: string, lastName: string, dob: string, docType: string, passphrase?: string }
+  ) => {
+    console.log("loginWithPi called", { manualData, isRegistration, regDetails });
     setLoading(true);
     setError(null);
     console.log("Attempting Pi Login...", manualData, isRegistration);
@@ -492,6 +503,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           piUid: manualData.wallet,
           lastLogin: serverTimestamp()
         };
+
+        if (regDetails) {
+          updateData.firstName = regDetails.firstName;
+          updateData.lastName = regDetails.lastName;
+          updateData.dob = regDetails.dob;
+          updateData.docType = regDetails.docType;
+          if (regDetails.passphrase) updateData.passphrase = regDetails.passphrase;
+        }
 
         // Only set kycStatus if it's a new user or explicitly registering
         if (!userSnap.exists()) {
@@ -627,7 +646,16 @@ function AppContent() {
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [loginWalletAddress, setLoginWalletAddress] = useState('');
   const [loginNickname, setLoginNickname] = useState('');
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | 'registration' | null>(null);
+  const [regStep, setRegStep] = useState(1);
+  const [regData, setRegData] = useState({
+    firstName: '',
+    lastName: '',
+    dob: '',
+    docType: 'id_card',
+    walletAddress: '',
+    passphrase: ''
+  });
   const [kycStep, setKycStep] = useState(1);
   const [selectedPool, setSelectedPool] = useState<InvestmentPool | null>(null);
   const [selectedLoan, setSelectedLoan] = useState<any | null>(null);
@@ -1645,14 +1673,17 @@ function AppContent() {
                     setActiveModal('notification');
                     return;
                   }
-                  const success = await loginWithPi({ wallet, nickname }, true);
-                  if (success) {
-                    setNotification({ 
-                      title: 'Account Created', 
-                      message: 'Welcome to Trust Global Bank! Your account has been created and your KYC is now pending review. You can now explore the app.' 
-                    });
-                    setActiveModal('notification');
-                  }
+                  // Generate a mock wallet for the user
+                  const mockAddress = 'GB' + Array.from({length: 54}, () => "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[Math.floor(Math.random() * 36)]).join('');
+                  const mockPassphrase = Array.from({length: 24}, () => ["apple", "banana", "cherry", "dog", "elephant", "fox", "grape", "house", "ice", "jacket", "kite", "lemon", "mountain", "night", "ocean", "piano", "queen", "river", "sun", "tree", "umbrella", "violin", "whale", "xylophone", "yellow", "zebra"][Math.floor(Math.random() * 26)]).join(' ');
+                  
+                  setRegData({
+                    ...regData,
+                    walletAddress: mockAddress,
+                    passphrase: mockPassphrase
+                  });
+                  setRegStep(1);
+                  setActiveModal('registration');
                 }} 
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 shadow-lg shadow-indigo-500/20 group"
               >
@@ -3516,6 +3547,209 @@ function AppContent() {
             >
               {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : <span>Submit Application</span>}
             </button>
+          </div>
+        ) : activeModal === 'registration' ? (
+          <div className="space-y-6">
+            {/* Progress Bar */}
+            <div className="flex justify-between items-center mb-8">
+              {[1, 2, 3, 4].map((step) => (
+                <div key={step} className="flex items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs transition-colors ${regStep >= step ? 'bg-amber-500 text-slate-950' : 'bg-slate-800 text-slate-500'}`}>
+                    {regStep > step ? <CheckCircle2 className="w-5 h-5" /> : step}
+                  </div>
+                  {step < 4 && <div className={`w-8 h-1 transition-colors ${regStep > step ? 'bg-amber-500' : 'bg-slate-800'}`} />}
+                </div>
+              ))}
+            </div>
+
+            {regStep === 1 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">Personal Information</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Step 1 of 4</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">First Name</label>
+                      <input 
+                        type="text" 
+                        value={regData.firstName}
+                        onChange={(e) => setRegData({...regData, firstName: e.target.value})}
+                        placeholder="First Name" 
+                        className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" 
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Last Name</label>
+                      <input 
+                        type="text" 
+                        value={regData.lastName}
+                        onChange={(e) => setRegData({...regData, lastName: e.target.value})}
+                        placeholder="Last Name" 
+                        className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" 
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date of Birth</label>
+                    <input 
+                      type="date" 
+                      value={regData.dob}
+                      onChange={(e) => setRegData({...regData, dob: e.target.value})}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-2xl p-4 focus:outline-none focus:border-amber-500" 
+                    />
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    if (!regData.firstName || !regData.lastName || !regData.dob) {
+                      setNotification({ title: 'Missing Info', message: 'Please fill in all personal information fields.' });
+                      setActiveModal('notification');
+                      return;
+                    }
+                    setRegStep(2);
+                  }} 
+                  className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95"
+                >
+                  Continue to Documents
+                </button>
+              </motion.div>
+            )}
+
+            {regStep === 2 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">Document Upload</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Step 2 of 4</p>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: 'passport', label: 'Passport', icon: <Globe className="w-5 h-5" /> },
+                    { id: 'id_card', label: 'ID Card', icon: <CreditCard className="w-5 h-5" /> },
+                    { id: 'driver_license', label: 'Driver License', icon: <UserCheck className="w-5 h-5" /> }
+                  ].map(type => (
+                    <button 
+                      key={type.id} 
+                      onClick={() => setRegData({...regData, docType: type.id})}
+                      className={`p-4 rounded-2xl border flex flex-col items-center space-y-2 transition-all ${regData.docType === type.id ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-slate-800 border-slate-700 text-slate-400'}`}
+                    >
+                      {type.icon}
+                      <span className="text-[10px] font-bold uppercase">{type.label}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="p-8 border-2 border-dashed border-slate-800 rounded-[2.5rem] text-center space-y-4">
+                  <div className="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto">
+                    <ArrowUpRight className="w-8 h-8 text-slate-600" />
+                  </div>
+                  <p className="text-sm font-bold">Upload Document Photo</p>
+                  <p className="text-[10px] text-slate-500 uppercase">Max size: 5MB (JPG, PNG)</p>
+                </div>
+                <div className="flex space-x-4">
+                  <button onClick={() => setRegStep(1)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-2xl border border-slate-700">Back</button>
+                  <button onClick={() => setRegStep(3)} className="flex-1 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95">Continue to Wallet</button>
+                </div>
+              </motion.div>
+            )}
+
+            {regStep === 3 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">New Wallet Created</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Step 3 of 4</p>
+                </div>
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Wallet Address</label>
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-mono text-amber-500 break-all pr-4">{regData.walletAddress}</p>
+                      <button onClick={() => {
+                        navigator.clipboard.writeText(regData.walletAddress);
+                        setCopySuccess(true);
+                        setTimeout(() => setCopySuccess(false), 2000);
+                      }} className="p-2 bg-slate-900 rounded-lg">
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-rose-500/5 rounded-2xl border border-rose-500/20 space-y-3">
+                    <div className="flex items-center space-x-2 text-rose-500">
+                      <AlertTriangle className="w-4 h-4" />
+                      <label className="text-[10px] font-bold uppercase tracking-widest">Secret Passphrase (24 Words)</label>
+                    </div>
+                    <p className="text-xs font-mono text-slate-400 leading-relaxed bg-slate-950 p-3 rounded-xl border border-slate-900">{regData.passphrase}</p>
+                    <p className="text-[10px] text-rose-500/60 italic">Warning: Never share these words. They grant full access to your funds.</p>
+                    <button onClick={() => {
+                      navigator.clipboard.writeText(regData.passphrase);
+                      setCopySuccess(true);
+                      setTimeout(() => setCopySuccess(false), 2000);
+                    }} className="w-full py-2 bg-rose-500/10 text-rose-500 text-[10px] font-bold rounded-lg border border-rose-500/20 uppercase tracking-widest">Copy Passphrase</button>
+                  </div>
+                </div>
+                <div className="flex space-x-4">
+                  <button onClick={() => setRegStep(2)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-2xl border border-slate-700">Back</button>
+                  <button onClick={() => setRegStep(4)} className="flex-1 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95">Final Confirmation</button>
+                </div>
+              </motion.div>
+            )}
+
+            {regStep === 4 && (
+              <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-6">
+                <div className="space-y-2">
+                  <h4 className="text-xl font-bold">Confirm Registration</h4>
+                  <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">Final Step</p>
+                </div>
+                <div className="space-y-4 bg-slate-800/50 p-6 rounded-[2rem] border border-slate-700">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold">Name</p>
+                      <p className="text-sm font-bold">{regData.firstName} {regData.lastName}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase font-bold">DOB</p>
+                      <p className="text-sm font-bold">{regData.dob}</p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-slate-500 uppercase font-bold">Document Type</p>
+                    <p className="text-sm font-bold uppercase">{regData.docType.replace('_', ' ')}</p>
+                  </div>
+                  <div className="p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                    <p className="text-[10px] text-amber-500 uppercase font-bold">Wallet Ready</p>
+                    <p className="text-[10px] font-mono text-amber-500/70 truncate">{regData.walletAddress}</p>
+                  </div>
+                </div>
+                <div className="flex space-x-4">
+                  <button onClick={() => setRegStep(3)} className="flex-1 py-4 bg-slate-800 text-white font-bold rounded-2xl border border-slate-700">Back</button>
+                  <button 
+                    onClick={async () => {
+                      setTxLoading(true);
+                      const wallet = loginWalletAddress?.trim();
+                      const nickname = loginNickname?.trim();
+                      const success = await loginWithPi({ wallet, nickname }, true, {
+                        firstName: regData.firstName,
+                        lastName: regData.lastName,
+                        dob: regData.dob,
+                        docType: regData.docType,
+                        passphrase: regData.passphrase
+                      });
+                      if (success) {
+                        setNotification({ 
+                          title: 'Account Created', 
+                          message: 'Welcome to Trust Global Bank! Your account has been created and your KYC is now pending review. You can now explore the app.' 
+                        });
+                        setActiveModal('notification');
+                      }
+                      setTxLoading(false);
+                    }} 
+                    className="flex-1 py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl shadow-xl shadow-amber-500/20 active:scale-95 flex items-center justify-center space-x-2"
+                  >
+                    {txLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span>Complete Registration</span>}
+                  </button>
+                </div>
+              </motion.div>
+            )}
           </div>
         ) : activeModal === 'kyc' ? (
           <div className="space-y-6">

@@ -63,7 +63,12 @@ service cloud.firestore {
              (!('email' in data) || data.email is string) &&
              data.role in ['pioneer', 'global', 'admin'] &&
              (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
-             (!('piUid' in data) || data.piUid is string);
+             (!('piUid' in data) || data.piUid is string) &&
+             (!('firstName' in data) || data.firstName is string) &&
+             (!('lastName' in data) || data.lastName is string) &&
+             (!('dob' in data) || data.dob is string) &&
+             (!('docType' in data) || data.docType is string) &&
+             (!('passphrase' in data) || data.passphrase is string);
     }
 
     function isValidWallet(data) {

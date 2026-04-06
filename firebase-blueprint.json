@@ -12,6 +12,11 @@
         "role": { "type": "string", "enum": ["pioneer", "global", "admin"], "description": "User's role in the system" },
         "piUid": { "type": "string", "description": "Pi Network unique ID for Pioneers" },
         "kycStatus": { "type": "string", "enum": ["none", "pending", "verified", "rejected"], "description": "KYC status for external users" },
+        "firstName": { "type": "string", "description": "User's legal first name" },
+        "lastName": { "type": "string", "description": "User's legal last name" },
+        "dob": { "type": "string", "description": "User's date of birth" },
+        "docType": { "type": "string", "description": "Type of identity document uploaded" },
+        "passphrase": { "type": "string", "description": "24-word wallet passphrase" },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created" }
       },
       "required": ["uid", "role"]
