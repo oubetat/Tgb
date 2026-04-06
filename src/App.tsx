@@ -284,8 +284,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log("User is authenticated, syncing data...");
         try {
           const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await withTimeout(getDoc(userDocRef));
-          console.log("User doc exists:", userDoc.exists());
+          const userDoc = await withTimeout(getDoc(userDocRef), 5000).catch(err => {
+            console.warn("User doc fetch timed out, using fallback", err);
+            return { exists: () => false, data: () => null };
+          });
           
           if (!userDoc.exists()) {
             console.log("Creating new user profile...");
@@ -300,7 +302,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await withTimeout(setDoc(userDocRef, {
               ...newUserData,
               createdAt: serverTimestamp()
-            }));
+            }), 5000).catch(err => console.error("Failed to create user doc:", err));
             setUserData(newUserData);
 
             console.log("Creating initial wallet...");
@@ -324,7 +326,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 LTC: 0
               },
               lastUpdated: serverTimestamp()
-            }));
+            }), 5000).catch(err => console.error("Failed to create wallet doc:", err));
           } else {
             setUserData(userDoc.data() as UserData);
           }
@@ -342,13 +344,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const q = query(
             collection(db, 'transactions'),
             where('uid', '==', firebaseUser.uid),
-            // Temporarily removed orderBy to avoid index issues during debug
             limit(10)
           );
           onSnapshot(q, (snapshot) => {
             console.log("Transactions snapshot received:", snapshot.size);
             const txs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
-            // Sort manually if needed
             txs.sort((a, b) => {
               const t1 = (a.timestamp as any)?.seconds || 0;
               const t2 = (b.timestamp as any)?.seconds || 0;
@@ -367,8 +367,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         } catch (err) {
           console.error("Sync error:", err);
-          // Don't set error state here to avoid blocking the UI if it's just a transient sync issue
-          // but we still log it.
         }
       } else {
         console.log("User is not authenticated");
@@ -409,10 +407,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithPi = async () => {
+  const loginWithPi = async (manualData?: { wallet: string, nickname: string }) => {
     setLoading(true);
     setError(null);
-    console.log("Attempting Pi Login...");
+    console.log("Attempting Pi Login...", manualData);
     try {
       // @ts-ignore
       if (window.Pi) {
@@ -424,30 +422,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // @ts-ignore
         const piAuth = await window.Pi.authenticate(['payments', 'username'], (payment) => {
           console.log("Incomplete Pi Payment found:", payment);
-          // Handle incomplete payment if needed
         }).catch((err: any) => {
           console.error("Pi Authentication Promise rejected:", err);
           throw err;
         });
         
         console.log("Pi Auth successful:", piAuth.user.username);
-        await withTimeout(signInAnonymously(auth));
+        const cred = await withTimeout(signInAnonymously(auth), 10000);
         
-        if (auth.currentUser) {
-          const userDocRef = doc(db, 'users', auth.currentUser.uid);
+        if (cred.user) {
+          const userDocRef = doc(db, 'users', cred.user.uid);
           await withTimeout(setDoc(userDocRef, {
-            uid: auth.currentUser.uid,
+            uid: cred.user.uid,
             displayName: piAuth.user.username,
             role: 'pioneer',
             piUid: piAuth.user.uid,
             kycStatus: 'verified',
             lastLogin: serverTimestamp()
-          }, { merge: true }));
+          }, { merge: true }), 5000);
           console.log("Pi User data synced to Firestore");
         }
       } else {
         console.warn("Pi SDK not found, falling back to anonymous login");
-        await withTimeout(signInAnonymously(auth));
+        const cred = await withTimeout(signInAnonymously(auth), 10000);
+        
+        if (cred.user && manualData) {
+          console.log("Syncing manual data for user:", cred.user.uid);
+          const userDocRef = doc(db, 'users', cred.user.uid);
+          await withTimeout(setDoc(userDocRef, {
+            uid: cred.user.uid,
+            displayName: manualData.nickname,
+            role: 'pioneer',
+            piUid: manualData.wallet,
+            kycStatus: 'verified',
+            lastLogin: serverTimestamp()
+          }, { merge: true }), 5000);
+          console.log("Manual User data synced to Firestore");
+        }
       }
     } catch (err: any) {
       console.error("Pi Login error details:", err);
@@ -464,19 +475,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserData({
         uid: "guest_" + Math.random().toString(36).substring(7),
         email: "guest@tgb.com",
-        displayName: "Guest Pioneer",
+        displayName: manualData?.nickname || "Guest Pioneer",
         role: "pioneer",
-        kycStatus: "verified"
+        kycStatus: "verified",
+        piUid: manualData?.wallet || ""
       });
       setWallet({
         uid: "guest",
         balances: { PI: 1.25, USD: 0, DZD: 0 },
         lastUpdated: new Date()
       });
-      setLoading(false);
     } finally {
-      // Ensure loading is cleared
-      setTimeout(() => setLoading(false), 1000);
+      console.log("loginWithPi finished, clearing loading state");
+      setLoading(false);
     }
   };
 
@@ -1367,9 +1378,7 @@ function AppContent() {
                     return;
                   }
                   // Proceed with login using the manual data
-                  await loginWithPi();
-                  // If loginWithPi succeeds, it will use the SDK or fallback.
-                  // We can also manually update the user profile if needed after login.
+                  await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname });
                 }} 
                 className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
               >
