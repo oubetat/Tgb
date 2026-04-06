@@ -8,6 +8,9 @@ import cors from "cors";
 
 dotenv.config();
 
+// إضافة الرابط من ملف البيئة
+const API_URL = process.env.API_URL || "https://tgbfinale.netlify.app/";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -18,6 +21,7 @@ async function startServer() {
   // Start listening IMMEDIATELY to prevent IP/DNS errors in preview
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`>>> SERVER IS LIVE AND STABLE ON PORT ${PORT} <<<`);
+    console.log(`>>> USING API_URL: ${API_URL} <<<`);
   });
 
   app.use(cors());
@@ -37,18 +41,16 @@ async function startServer() {
     app.use(express.static(distPath));
     
     // API routes and other specific handlers should stay above the wildcard
-    app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+    app.get("/api/health", (req, res) => res.json({ status: "ok", api: API_URL }));
     
     // SPA fallback
     app.get("*", (req, res) => {
-      // Check if it's an API call or a static file request first
       if (req.path.startsWith('/api') || req.path.includes('.')) {
         return res.status(404).send('Not found');
       }
       res.sendFile(path.join(distPath, "index.html"));
     });
   } else {
-    // Fallback to Vite middleware for development if dist doesn't exist
     console.log("Dist folder not found, falling back to Vite middleware");
     try {
       const vite = await createViteServer({
