@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Wallet, 
@@ -31,7 +31,10 @@ import {
   Building2,
   Plus,
   Send,
-  ArrowLeft
+  ArrowLeft,
+  Filter,
+  ArrowUpDown,
+  Search
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -585,6 +588,45 @@ function AppContent() {
   ]);
   const [showQrModal, setShowQrModal] = useState(false);
   const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
+  
+  // Transaction Filtering & Sorting
+  const [txFilterType, setTxFilterType] = useState<'all' | 'deposit' | 'withdraw' | 'transfer' | 'exchange' | 'shop'>('all');
+  const [txSortBy, setTxSortBy] = useState<'date' | 'amount'>('date');
+  const [txSortOrder, setTxSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [txSearchQuery, setTxSearchQuery] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const filteredTransactions = useMemo(() => {
+    let result = [...transactions];
+
+    // Filter by type
+    if (txFilterType !== 'all') {
+      result = result.filter(tx => tx.type === txFilterType);
+    }
+
+    // Filter by search query
+    if (txSearchQuery) {
+      const query = txSearchQuery.toLowerCase();
+      result = result.filter(tx => 
+        tx.description.toLowerCase().includes(query) || 
+        tx.type.toLowerCase().includes(query) ||
+        (tx.txid && tx.txid.toLowerCase().includes(query))
+      );
+    }
+
+    // Sort
+    result.sort((a, b) => {
+      if (txSortBy === 'date') {
+        const dateA = a.timestamp?.seconds || 0;
+        const dateB = b.timestamp?.seconds || 0;
+        return txSortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+      } else {
+        return txSortOrder === 'desc' ? Math.abs(b.amount) - Math.abs(a.amount) : Math.abs(a.amount) - Math.abs(b.amount);
+      }
+    });
+
+    return result;
+  }, [transactions, txFilterType, txSortBy, txSortOrder, txSearchQuery]);
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -1497,40 +1539,120 @@ function AppContent() {
             <section className="space-y-4">
               <div className="flex justify-between items-center px-1">
                 <h3 className="text-lg font-bold">{t.activity}</h3>
-                <button className="text-amber-500 text-sm font-medium">See All</button>
+                <div className="flex items-center space-x-2">
+                  <button 
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`p-2 rounded-xl border transition-all ${showFilters ? 'bg-amber-500 border-amber-500 text-slate-950' : 'bg-slate-900 border-slate-800 text-slate-400'}`}
+                  >
+                    <Filter className="w-4 h-4" />
+                  </button>
+                  <button className="text-amber-500 text-sm font-medium">See All</button>
+                </div>
               </div>
+
+              <AnimatePresence>
+                {showFilters && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden space-y-4"
+                  >
+                    <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl space-y-4">
+                      {/* Search */}
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                        <input 
+                          type="text"
+                          placeholder="Search transactions..."
+                          value={txSearchQuery}
+                          onChange={(e) => setTxSearchQuery(e.target.value)}
+                          className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 pl-10 pr-4 text-sm focus:border-amber-500 outline-none"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Filter Type */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Type</label>
+                          <select 
+                            value={txFilterType}
+                            onChange={(e) => setTxFilterType(e.target.value as any)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm focus:border-amber-500 outline-none appearance-none"
+                          >
+                            <option value="all">All Types</option>
+                            <option value="deposit">Deposit</option>
+                            <option value="withdraw">Withdraw</option>
+                            <option value="transfer">Transfer</option>
+                            <option value="exchange">Exchange</option>
+                            <option value="shop">Shop</option>
+                          </select>
+                        </div>
+
+                        {/* Sort By */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Sort By</label>
+                          <div className="flex space-x-2">
+                            <select 
+                              value={txSortBy}
+                              onChange={(e) => setTxSortBy(e.target.value as any)}
+                              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl py-2 px-3 text-sm focus:border-amber-500 outline-none appearance-none"
+                            >
+                              <option value="date">Date</option>
+                              <option value="amount">Amount</option>
+                            </select>
+                            <button 
+                              onClick={() => setTxSortOrder(txSortOrder === 'asc' ? 'desc' : 'asc')}
+                              className="bg-slate-950 border border-slate-800 p-2 rounded-xl text-slate-400 hover:text-amber-500"
+                            >
+                              <ArrowUpDown className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="space-y-3">
-                {transactions.length > 0 ? transactions.map((tx) => (
+                {filteredTransactions.length > 0 ? filteredTransactions.map((tx) => (
                   <div key={tx.id} className="bg-slate-900/50 p-4 rounded-2xl flex items-center justify-between border border-slate-800/50">
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
                         {tx.type === 'deposit' ? <ArrowDownLeft className="w-5 h-5 text-emerald-500" /> : 
                          tx.type === 'withdraw' ? <ArrowUpRight className="w-5 h-5 text-rose-500" /> :
+                         tx.type === 'shop' ? <ShoppingBag className="w-5 h-5 text-amber-500" /> :
                          <RefreshCw className="w-5 h-5 text-blue-500" />}
                       </div>
                       <div>
                         <p className="font-bold text-sm capitalize">{tx.type}</p>
                         <p className="text-xs text-slate-500">{tx.description}</p>
-                        {tx.txid && (
-                          <a 
-                            href={`https://minepi.com/blockexplorer/testnet/transaction/${tx.txid}`} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-[10px] text-amber-500 hover:underline flex items-center mt-1"
-                          >
-                            <Link className="w-3 h-3 mr-1" />
-                            Blockchain: {tx.txid.slice(0, 8)}...
-                          </a>
-                        )}
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-[10px] text-slate-600">
+                            {tx.timestamp?.seconds ? new Date(tx.timestamp.seconds * 1000).toLocaleDateString() : 'Recent'}
+                          </span>
+                          {tx.txid && (
+                            <a 
+                              href={`https://minepi.com/blockexplorer/testnet/transaction/${tx.txid}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-[10px] text-amber-500 hover:underline flex items-center"
+                            >
+                              <Link className="w-3 h-3 mr-1" />
+                              {tx.txid.slice(0, 8)}...
+                            </a>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-emerald-500' : 'text-white'}`}>{tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(4)} π</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-tighter">Completed</p>
+                      <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-emerald-500' : 'text-white'}`}>{tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(4)} {tx.currency || 'π'}</p>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-tighter">{tx.status || 'Completed'}</p>
                     </div>
                   </div>
                 )) : (
-                  <div className="text-center py-8 text-slate-600 italic">No recent activity</div>
+                  <div className="text-center py-8 text-slate-600 italic">No transactions found</div>
                 )}
               </div>
             </section>
