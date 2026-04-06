@@ -82,7 +82,12 @@ const useBinancePrices = () => {
   const [prices, setPrices] = useState<{ [symbol: string]: number }>({ 
     PI: PI_FIXED_PRICE, 
     USD: 1, 
-    DZD: 0.0074,
+    DZD: 134.5, // Updated to a more realistic USD/DZD rate
+    EUR: 0.92,
+    GBP: 0.79,
+    JPY: 151.5,
+    KRW: 1350,
+    CNY: 7.23,
     BTC: 65000,
     ETH: 3500,
     BNB: 580,
@@ -103,50 +108,52 @@ const useBinancePrices = () => {
     const fetchPrices = async () => {
       try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout for Binance
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
         
-        const response = await fetch('https://api.binance.com/api/v3/ticker/price', { signal: controller.signal });
+        // Fetch Crypto Prices from Binance
+        const binanceRes = await fetch('https://api.binance.com/api/v3/ticker/price', { signal: controller.signal });
+        const binanceData = await binanceRes.json();
+        
+        // Fetch Fiat Rates from ExchangeRate-API (Free tier, no key required for this endpoint)
+        const fiatRes = await fetch('https://open.er-api.com/v6/latest/USD', { signal: controller.signal });
+        const fiatData = await fiatRes.json();
+        
         clearTimeout(timeoutId);
         
-        const data = await response.json();
         const newPrices: { [symbol: string]: number } = { 
           PI: PI_FIXED_PRICE, 
-          USD: 1, 
-          DZD: 0.0074,
-          BTC: 65000,
-          ETH: 3500,
-          BNB: 580,
-          SOL: 145,
-          XRP: 0.62,
-          ADA: 0.45,
-          DOGE: 0.16,
-          AVAX: 35,
-          DOT: 7.2,
-          LINK: 18,
-          MATIC: 0.72,
-          LTC: 85,
-          BCH: 450
+          USD: 1,
+          ...prices // Keep existing as fallback
         };
+
+        // Update Fiat Rates (USD based)
+        if (fiatData && fiatData.rates) {
+          Object.keys(fiatData.rates).forEach(symbol => {
+            newPrices[symbol] = fiatData.rates[symbol];
+          });
+        }
         
         // Map Binance prices (symbol like BTCUSDT) to our symbols
-        data.forEach((item: any) => {
-          if (item.symbol.endsWith('USDT')) {
-            const symbol = item.symbol.replace('USDT', '');
-            newPrices[symbol] = parseFloat(item.price);
-          }
-        });
+        if (Array.isArray(binanceData)) {
+          binanceData.forEach((item: any) => {
+            if (item.symbol.endsWith('USDT')) {
+              const symbol = item.symbol.replace('USDT', '');
+              newPrices[symbol] = parseFloat(item.price);
+            }
+          });
+        }
         
-        console.log("Prices updated:", Object.keys(newPrices).length);
+        console.log("Global rates updated:", Object.keys(newPrices).length);
         setPrices(newPrices);
       } catch (err) {
-        console.error("Binance price error:", err);
+        console.error("Exchange rate fetch error:", err);
       } finally {
         setLoading(false);
       }
     };
 
     fetchPrices();
-    const interval = setInterval(fetchPrices, 30000); // Update every 30s
+    const interval = setInterval(fetchPrices, 60000); // Update every 60s
     return () => clearInterval(interval);
   }, []);
 
@@ -1657,22 +1664,29 @@ function AppContent() {
               
               <div className="space-y-4">
                 {[
-                  { symbol: 'USD', name: 'US Dollar', rate: 314159, icon: '🇺🇸' },
-                  { symbol: 'EUR', name: 'Euro', rate: 292171, icon: '🇪🇺' },
-                  { symbol: 'GBP', name: 'British Pound', rate: 251159, icon: '🇬🇧' },
-                  { symbol: 'DZD', name: 'Algerian Dinar', rate: 42411465, icon: '🇩🇿' }
-                ].map(rate => (
-                  <div key={rate.symbol} className="flex justify-between items-center p-3 bg-slate-950/50 rounded-2xl border border-slate-800/50">
-                    <div className="flex items-center space-x-3">
-                      <span className="text-2xl">{rate.icon}</span>
-                      <div>
-                        <p className="font-bold text-sm">1 π ≈ {rate.symbol}</p>
-                        <p className="text-[10px] text-slate-500 uppercase">{rate.name}</p>
+                  { symbol: 'USD', name: 'US Dollar', icon: '🇺🇸' },
+                  { symbol: 'EUR', name: 'Euro', icon: '🇪🇺' },
+                  { symbol: 'GBP', name: 'British Pound', icon: '🇬🇧' },
+                  { symbol: 'DZD', name: 'Algerian Dinar', icon: '🇩🇿' },
+                  { symbol: 'KRW', name: 'South Korean Won', icon: '🇰🇷' },
+                  { symbol: 'JPY', name: 'Japanese Yen', icon: '🇯🇵' }
+                ].map(rate => {
+                  const currentRate = prices[rate.symbol] ? PI_FIXED_PRICE * prices[rate.symbol] : 0;
+                  return (
+                    <div key={rate.symbol} className="flex justify-between items-center p-3 bg-slate-950/50 rounded-2xl border border-slate-800/50">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-2xl">{rate.icon}</span>
+                        <div>
+                          <p className="font-bold text-sm">1 π ≈ {rate.symbol}</p>
+                          <p className="text-[10px] text-slate-500 uppercase">{rate.name}</p>
+                        </div>
                       </div>
+                      <p className="font-black text-amber-500 text-sm">
+                        {currentRate > 0 ? currentRate.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '---'}
+                      </p>
                     </div>
-                    <p className="font-black text-amber-500 text-sm">{rate.rate.toLocaleString()}</p>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
