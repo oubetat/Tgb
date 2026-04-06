@@ -15,6 +15,11 @@ async function startServer() {
   const app = express();
   const PORT = 3000; // Fixed port for AI Studio
 
+  // Start listening IMMEDIATELY to prevent IP/DNS errors in preview
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`>>> SERVER IS LIVE AND STABLE ON PORT ${PORT} <<<`);
+  });
+
   app.use(cors());
   app.use(express.json());
 
@@ -24,32 +29,39 @@ async function startServer() {
     res.send("4dcd60204813d07453f6579ecfc9b4f8d3351314b95bef8a04b78f9c9d5dc7ceceb6803cf13e5281061f06718e3feeb114c14abb9297f957d0f3587752792e69");
   });
 
-  // Health check
-  app.get("/api/health", (req, res) => res.json({ status: "ok" }));
-
-  // Start listening IMMEDIATELY to prevent IP/DNS errors in preview
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`>>> SERVER IS LIVE ON PORT ${PORT} <<<`);
-  });
-
-  // Load Vite middleware for development
-  try {
-    const vite = await createViteServer({
-      server: { 
-        middlewareMode: true,
-        host: '0.0.0.0',
-        hmr: false // Disable HMR to prevent flickering
-      },
-      appType: "spa",
+  // Serve static files from the 'dist' directory
+  const distPath = path.join(process.cwd(), "dist");
+  
+  if (fs.existsSync(distPath)) {
+    console.log("Serving production build from /dist");
+    app.use(express.static(distPath));
+    
+    // API routes and other specific handlers should stay above the wildcard
+    app.get("/api/health", (req, res) => res.json({ status: "ok" }));
+    
+    // SPA fallback
+    app.get("*", (req, res) => {
+      // Check if it's an API call or a static file request first
+      if (req.path.startsWith('/api') || req.path.includes('.')) {
+        return res.status(404).send('Not found');
+      }
+      res.sendFile(path.join(distPath, "index.html"));
     });
-    app.use(vite.middlewares);
-    console.log("Vite middleware integrated successfully");
-  } catch (err) {
-    console.error("Vite failed, falling back to static files:", err);
-    const distPath = path.join(process.cwd(), "dist");
-    if (fs.existsSync(distPath)) {
-      app.use(express.static(distPath));
-      app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
+  } else {
+    // Fallback to Vite middleware for development if dist doesn't exist
+    console.log("Dist folder not found, falling back to Vite middleware");
+    try {
+      const vite = await createViteServer({
+        server: { 
+          middlewareMode: true,
+          host: '0.0.0.0',
+          hmr: false 
+        },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } catch (err) {
+      console.error("Vite failed:", err);
     }
   }
 }
