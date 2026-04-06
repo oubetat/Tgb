@@ -58,9 +58,9 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role']) &&
+      return data.keys().hasAll(['uid', 'role']) &&
              data.uid is string &&
-             data.email is string &&
+             (!('email' in data) || data.email is string) &&
              data.role in ['pioneer', 'global', 'admin'] &&
              (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
              (!('piUid' in data) || data.piUid is string);

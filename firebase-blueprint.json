@@ -14,7 +14,7 @@
         "kycStatus": { "type": "string", "enum": ["none", "pending", "verified", "rejected"], "description": "KYC status for external users" },
         "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created" }
       },
-      "required": ["uid", "email", "role"]
+      "required": ["uid", "role"]
     },
     "KycDocument": {
       "title": "KYC Document",

@@ -316,7 +316,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               displayName: firebaseUser.displayName || 'Pioneer User',
               role: firebaseUser.isAnonymous ? 'pioneer' : 'global',
               photoURL: firebaseUser.photoURL || '',
-              kycStatus: firebaseUser.isAnonymous ? 'verified' : 'none',
+              kycStatus: 'none',
             };
             await withTimeout(setDoc(userDocRef, {
               ...newUserData,
@@ -444,58 +444,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginWithPi = async (manualData?: { wallet: string, nickname: string }, isRegistration: boolean = false) => {
+    console.log("loginWithPi called", { manualData, isRegistration });
     setLoading(true);
     setError(null);
     console.log("Attempting Pi Login...", manualData, isRegistration);
+    let success = false;
     try {
+      let cred: any = null;
       // @ts-ignore
       if (window.Pi) {
         console.log("Pi SDK found, authenticating...");
-        
-        // Add a small delay to ensure SDK is fully ready
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // @ts-ignore
-        const piAuth = await window.Pi.authenticate(['payments', 'username'], (payment) => {
-          console.log("Incomplete Pi Payment found:", payment);
-        }).catch((err: any) => {
-          console.error("Pi Authentication Promise rejected:", err);
-          throw err;
-        });
-        
-        console.log("Pi Auth successful:", piAuth.user.username);
-        const cred = await withTimeout(signInAnonymously(auth), 20000);
-        
-        if (cred.user) {
-          const userDocRef = doc(db, 'users', cred.user.uid);
-          await withTimeout(setDoc(userDocRef, {
-            uid: cred.user.uid,
-            displayName: piAuth.user.username,
-            role: 'pioneer',
-            piUid: piAuth.user.uid,
-            kycStatus: isRegistration ? 'pending' : 'verified',
-            lastLogin: serverTimestamp()
-          }, { merge: true }), 10000);
-          console.log("Pi User data synced to Firestore");
-        }
-      } else {
-        console.warn("Pi SDK not found, falling back to anonymous login");
-        const cred = await withTimeout(signInAnonymously(auth), 20000);
-        
-        if (cred.user && manualData) {
-          console.log("Syncing manual data for user:", cred.user.uid);
-          const userDocRef = doc(db, 'users', cred.user.uid);
-          await withTimeout(setDoc(userDocRef, {
-            uid: cred.user.uid,
-            displayName: manualData.nickname,
-            role: 'pioneer',
-            piUid: manualData.wallet,
-            kycStatus: isRegistration ? 'pending' : 'verified',
-            lastLogin: serverTimestamp()
-          }, { merge: true }), 10000);
-          console.log("Manual User data synced to Firestore");
+        try {
+          // Add a small delay to ensure SDK is fully ready
+          await new Promise(resolve => setTimeout(resolve, 500));
+          
+          // @ts-ignore
+          const piAuth = await withTimeout(window.Pi.authenticate(['payments', 'username'], (payment) => {
+            console.log("Incomplete Pi Payment found:", payment);
+          }), 30000).catch((err: any) => {
+            console.error("Pi Authentication Promise rejected or timed out:", err);
+            throw err;
+          }) as any;
+          
+          console.log("Pi Auth successful:", piAuth.user.username);
+          cred = await withTimeout(signInAnonymously(auth), 20000);
+          console.log("Firebase Anonymous sign-in successful", cred.user.uid);
+        } catch (piErr) {
+          console.error("Pi SDK Auth failed, falling back to manual", piErr);
         }
       }
+
+      if (!cred) {
+        console.log("Attempting direct Firebase Anonymous sign-in");
+        cred = await withTimeout(signInAnonymously(auth), 20000);
+        console.log("Firebase Anonymous sign-in successful", cred.user.uid);
+      }
+
+      if (cred.user && manualData) {
+        console.log("Syncing manual data for user:", cred.user.uid);
+        const userDocRef = doc(db, 'users', cred.user.uid);
+        const userSnap = await getDoc(userDocRef);
+        
+        const updateData: any = {
+          uid: cred.user.uid,
+          displayName: manualData.nickname,
+          role: 'pioneer',
+          piUid: manualData.wallet,
+          lastLogin: serverTimestamp()
+        };
+
+        // Only set kycStatus if it's a new user or explicitly registering
+        if (!userSnap.exists()) {
+          updateData.kycStatus = isRegistration ? 'pending' : 'none';
+          updateData.createdAt = serverTimestamp();
+        } else if (isRegistration) {
+          updateData.kycStatus = 'pending';
+        }
+
+        await withTimeout(setDoc(userDocRef, updateData, { merge: true }), 10000);
+        console.log("Manual User data synced to Firestore");
+      }
+      console.log("Login process complete");
+      success = true;
     } catch (err: any) {
       console.error("Pi Login error details:", err);
       let errorMsg = typeof err === 'string' ? err : (err.message || JSON.stringify(err));
@@ -525,8 +535,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         lastUpdated: new Date()
       });
     } finally {
-      console.log("loginWithPi finished, clearing loading state");
+      console.log("loginWithPi finished, success:", success);
       setLoading(false);
+      return success;
     }
   };
 
@@ -548,7 +559,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const logout = async () => { await signOut(auth); };
+  const logout = async () => { 
+    await signOut(auth); 
+    setUser(null);
+    setUserData(null);
+    setWallet(null);
+    setTransactions([]);
+  };
 
   return (
     <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, stakes, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
@@ -618,7 +635,14 @@ function AppContent() {
   const [notification, setNotification] = useState<{ title: string; message: string }>({ title: '', message: '' });
   const [txLoading, setTxLoading] = useState(false);
   const [txSuccess, setTxSuccess] = useState(false);
-  const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>('en');
+  const [lang, setLang] = useState<'en' | 'ar' | 'fr' | 'es' | 'kab' | 'ko' | 'zh' | 'ja' | 'it' | 'pt'>(() => {
+    const saved = localStorage.getItem('tgb_lang');
+    return (saved as any) || 'en';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('tgb_lang', lang);
+  }, [lang]);
   const isRTL = lang === 'ar';
   const [activeTab, setActiveTab] = useState<'wallet' | 'market' | 'cards' | 'profile' | 'store' | 'exchange' | 'finance'>('wallet');
   const [copySuccess, setCopySuccess] = useState(false);
@@ -840,8 +864,14 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates', bankTransfer: 'Bank Transfer', transferFrom: 'Transfer From', transferTo: 'Transfer To', tgbAccount: 'TGB Account', selectBank: 'Select Bank', amountToTransfer: 'Amount to Transfer', executeTransfer: 'Execute Transfer', transferSuccess: 'Transfer Successful', transferError: 'Transfer Failed' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان', bankTransfer: 'تحويل بنكي', transferFrom: 'تحويل من', transferTo: 'تحويل إلى', tgbAccount: 'حساب TGB', selectBank: 'اختر البنك', amountToTransfer: 'المبلغ المراد تحويله', executeTransfer: 'تنفيذ التحويل', transferSuccess: 'تم التحويل بنجاح', transferError: 'فشل التحويل' },
+    en: { 
+      balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates', bankTransfer: 'Bank Transfer', transferFrom: 'Transfer From', transferTo: 'Transfer To', tgbAccount: 'TGB Account', selectBank: 'Select Bank', amountToTransfer: 'Amount to Transfer', executeTransfer: 'Execute Transfer', transferSuccess: 'Transfer Successful', transferError: 'Transfer Failed',
+      login: 'Login', register: 'Register', guestTour: 'Guest Tour', walletAddress: 'Pi Wallet Address', nickname: 'Nickname', openAccount: 'Open New Account & KYC', pioneerConnection: 'Pioneer Connection', securedByPi: 'Secured by Pi Network KYC', termsOfService: 'Terms of Service', privacyPolicy: 'Privacy Policy', selectLanguage: 'Select Language'
+    },
+    ar: { 
+      balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان', bankTransfer: 'تحويل بنكي', transferFrom: 'تحويل من', transferTo: 'تحويل إلى', tgbAccount: 'حساب TGB', selectBank: 'اختر البنك', amountToTransfer: 'المبلغ المراد تحويله', executeTransfer: 'تنفيذ التحويل', transferSuccess: 'تم التحويل بنجاح', transferError: 'فشل التحويل',
+      login: 'تسجيل الدخول', register: 'تسجيل', guestTour: 'جولة زائر', walletAddress: 'عنوان محفظة Pi', nickname: 'الاسم المستعار', openAccount: 'فتح حساب جديد و KYC', pioneerConnection: 'اتصال Pioneer', securedByPi: 'مؤمن بواسطة Pi Network KYC', termsOfService: 'شروط الخدمة', privacyPolicy: 'سياسة الخصوصية', selectLanguage: 'اختر اللغة'
+    },
     fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', exchangeHistory: 'Historique des échanges', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané', finance: 'Finance', lending: 'Prêt P2P', pools: 'Pools d\'Investissement', vault: 'Coffre Personnel', partnership: 'Partenariat Commercial', scanQr: 'Scanner QR', metrics: 'Métriques Globales Pi', totalSupply: 'Offre Totale', circulatingSupply: 'Offre Circulante', lockedSupply: 'Offre Verrouillée', activeCountries: 'Pays Actifs', connectedBanks: 'Banques Connectées', exchangeRates: 'Taux de Change Globaux', remittance: 'Remise Globale', gcvValue: 'Valeur de Consensus (GCV)', createLending: 'Créer une Demande de Prêt', loanAmount: 'Montant du Prêt (π)', loanApr: 'Taux d\'Intérêt (APR %)', loanPurpose: 'But du Prêt', addBank: 'Ajouter une Banque Globale', executeLoan: 'Exécuter le Prêt', joinPool: 'Rejoindre le Groupe', stakePi: 'Staker Pi pour Boost Rank', submitProposal: 'Soumettre une Proposition', comingSoon: 'Fonctionnalité Bientôt', copy: 'Copier', copied: 'Copié', logout: 'Déconnexion', settings: 'Paramètres', privacy: 'Confidentialité', language: 'Langue', bankDetails: 'Détails Bancaires', bankName: 'Nom de la Banque', accountNumber: 'Numéro de Compte', swiftCode: 'Code SWIFT/BIC', stakeAmount: 'Montant du Stake', stakeDuration: 'Durée (Mois)', joinPoolConfirm: 'Rejoindre le Pool d\'Investissement', poolContribution: 'Contribution (π)', confirm: 'Confirmer', cancel: 'Annuler' },
     es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Accividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', exchangeHistory: 'Historial de intercambios', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo', finance: 'Finanzas', lending: 'Préstamos P2P', pools: 'Fondos de Inversión', vault: 'Bóveda Personal', partnership: 'Asociación Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suministro Total', circulatingSupply: 'Suministro Circulante', lockedSupply: 'Suministro Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Tasas de Cambio Globales', remittance: 'Remesas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Crear Solicitud de Préstamo', loanAmount: 'Monto del Préstamo (π)', loanApr: 'Tasa de Interés (APR %)', loanPurpose: 'Propósito del Préstamo', addBank: 'Agregar Banco Global', executeLoan: 'Ejecutar Préstamo', joinPool: 'Unirse al Grupo', stakePi: 'Staker Pi para Subir Rango', submitProposal: 'Enviar Propuesta', comingSoon: 'Próximamente', copy: 'Copiar', copied: 'Copiado', logout: 'Cerrar Sesión', settings: 'Ajustes', privacy: 'Privacidad', language: 'Idioma', bankDetails: 'Detalles Bancarios', bankName: 'Nombre del Banco', accountNumber: 'Número de Cuenta', swiftCode: 'Código SWIFT/BIC', stakeAmount: 'Monto de Stake', stakeDuration: 'Duración (Meses)', joinPoolConfirm: 'Unirse al Fondo de Inversión', poolContribution: 'Contribución (π)', confirm: 'Confirmar', cancel: 'Cancelar' },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', exchangeHistory: 'Amazray n ubeddel', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt', bankDetails: 'Talɣut n lbank', bankName: 'Isem n lbank', accountNumber: 'Uṭṭun n uselmed', swiftCode: 'SWIFT/BIC', stakeAmount: 'Azal n users', stakeDuration: 'Tanzagt (Agguren)', joinPoolConfirm: 'Ddu ɣer ugraw n usfari', poolContribution: 'Asiwel (π)', confirm: 'Sentem', cancel: 'Sefsex' },
@@ -1508,6 +1538,16 @@ function AppContent() {
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md text-center space-y-12 relative z-10">
           <div className="flex flex-col items-center space-y-6">
+            <div className="flex justify-between w-full items-center mb-4">
+              <button 
+                onClick={() => setActiveModal('language')} 
+                className="p-3 bg-slate-900/50 backdrop-blur-md rounded-2xl border border-slate-800 text-slate-400 hover:text-white transition-all flex items-center space-x-2"
+              >
+                <Languages className="w-5 h-5" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">{lang.toUpperCase()}</span>
+              </button>
+              <div className="w-10" /> {/* Spacer */}
+            </div>
             <motion.div 
               whileHover={{ rotate: 360 }}
               transition={{ duration: 1 }}
@@ -1524,7 +1564,7 @@ function AppContent() {
           <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 p-8 rounded-[3rem] space-y-8 shadow-2xl">
             <div className="space-y-4">
               <div className="space-y-2 text-left">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Pi Wallet Address</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.walletAddress}</label>
                 <div className="relative">
                   <input 
                     type="text" 
@@ -1537,7 +1577,7 @@ function AppContent() {
                 </div>
               </div>
               <div className="space-y-2 text-left">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">Nickname</label>
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-4">{t.nickname}</label>
                 <div className="relative">
                   <input 
                     type="text" 
@@ -1573,17 +1613,20 @@ function AppContent() {
               
               <button 
                 onClick={async () => {
-                  if (!loginWalletAddress || !loginNickname) {
+                  console.log("Pioneer Connection clicked", { loginWalletAddress, loginNickname });
+                  const wallet = loginWalletAddress?.trim();
+                  const nickname = loginNickname?.trim();
+                  if (!wallet || !nickname) {
                     setNotification({ title: 'Required Fields', message: 'Please enter your Pi Wallet Address and Nickname to connect.' });
                     setActiveModal('notification');
                     return;
                   }
-                  await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname });
+                  await loginWithPi({ wallet, nickname });
                 }} 
                 className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
               >
                 <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
-                <span>Pioneer Connection</span>
+                <span>{t.pioneerConnection}</span>
               </button>
 
               <div className="flex items-center space-x-4">
@@ -1594,17 +1637,27 @@ function AppContent() {
 
               <button 
                 onClick={async () => {
-                  if (!loginWalletAddress || !loginNickname) {
+                  console.log("Open New Account clicked", { loginWalletAddress, loginNickname });
+                  const wallet = loginWalletAddress?.trim();
+                  const nickname = loginNickname?.trim();
+                  if (!wallet || !nickname) {
                     setNotification({ title: 'Required Fields', message: 'Please enter your Pi Wallet Address and Nickname to register.' });
                     setActiveModal('notification');
                     return;
                   }
-                  await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname }, true);
+                  const success = await loginWithPi({ wallet, nickname }, true);
+                  if (success) {
+                    setNotification({ 
+                      title: 'Account Created', 
+                      message: 'Welcome to Trust Global Bank! Your account has been created and your KYC is now pending review. You can now explore the app.' 
+                    });
+                    setActiveModal('notification');
+                  }
                 }} 
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 shadow-lg shadow-indigo-500/20 group"
               >
                 <UserPlus className="w-5 h-5" />
-                <span>Open New Account & KYC</span>
+                <span>{t.openAccount}</span>
               </button>
               
               <button 
@@ -1614,7 +1667,7 @@ function AppContent() {
                 <div className="p-2 bg-slate-900 rounded-lg group-hover:bg-slate-800 transition-colors">
                   <Zap className="w-4 h-4 text-amber-500" />
                 </div>
-                <span>Guest Tour</span>
+                <span>{t.guestTour}</span>
               </button>
             </div>
           </div>
@@ -1622,19 +1675,23 @@ function AppContent() {
           <div className="flex flex-col items-center space-y-4">
             <div className="flex items-center space-x-2 text-slate-500">
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <span className="text-[10px] font-bold uppercase tracking-widest">Secured by Pi Network KYC</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest">{t.securedByPi}</span>
             </div>
             <p className="text-[10px] text-slate-600 max-w-[250px] leading-relaxed">
               By connecting, you agree to our{' '}
-              <button onClick={() => setLegalView('terms')} className="text-slate-400 underline hover:text-white transition-colors">Terms of Service</button>
+              <button onClick={() => setLegalView('terms')} className="text-slate-400 underline hover:text-white transition-colors">{t.termsOfService}</button>
               {' '}and{' '}
-              <button onClick={() => setLegalView('privacy')} className="text-slate-400 underline hover:text-white transition-colors">Privacy Policy</button>.
+              <button onClick={() => setLegalView('privacy')} className="text-slate-400 underline hover:text-white transition-colors">{t.privacyPolicy}</button>.
             </p>
           </div>
         </motion.div>
 
         {/* Login Screen Modals */}
-        <Modal isOpen={!!activeModal} onClose={() => setActiveModal(null)} title={activeModal === 'notification' ? notification.title : 'Notification'}>
+        <Modal 
+          isOpen={!!activeModal} 
+          onClose={() => setActiveModal(null)} 
+          title={activeModal === 'notification' ? notification.title : activeModal === 'language' ? 'Select Language' : 'Notification'}
+        >
           {activeModal === 'notification' && (
             <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
               <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center">
@@ -3070,30 +3127,38 @@ function AppContent() {
             </button>
           </div>
         ) : activeModal === 'language' ? (
-          <div className="grid grid-cols-2 gap-3 py-4">
-            {[
-              { id: 'en', label: 'English' },
-              { id: 'ar', label: 'العربية' },
-              { id: 'fr', label: 'Français' },
-              { id: 'es', label: 'Español' },
-              { id: 'kab', label: 'Taqbaylit' },
-              { id: 'ko', label: '한국어' },
-              { id: 'zh', label: '中文' },
-              { id: 'ja', label: '日本語' },
-              { id: 'it', label: 'Italiano' },
-              { id: 'pt', label: 'Português' }
-            ].map((l) => (
-              <button 
-                key={l.id}
-                onClick={() => {
-                  setLang(l.id as any);
-                  setActiveModal(null);
-                }}
-                className={`p-4 rounded-2xl text-sm font-bold border transition-all ${lang === l.id ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xl shadow-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
-              >
-                {l.label}
-              </button>
-            ))}
+          <div className="space-y-6 py-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { id: 'en', label: 'English' },
+                { id: 'ar', label: 'العربية' },
+                { id: 'fr', label: 'Français' },
+                { id: 'es', label: 'Español' },
+                { id: 'kab', label: 'Taqbaylit' },
+                { id: 'ko', label: '한국어' },
+                { id: 'zh', label: '中文' },
+                { id: 'ja', label: '日本語' },
+                { id: 'it', label: 'Italiano' },
+                { id: 'pt', label: 'Português' }
+              ].map((l) => (
+                <button 
+                  key={l.id}
+                  onClick={() => {
+                    setLang(l.id as any);
+                    setActiveModal(null);
+                  }}
+                  className={`p-4 rounded-2xl text-sm font-bold border transition-all ${lang === l.id ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xl shadow-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+            <button 
+              onClick={() => setActiveModal(null)}
+              className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl border border-slate-700 transition-all"
+            >
+              {t.cancel || 'Back'}
+            </button>
           </div>
         ) : activeModal === 'bank' ? (
           <div className="space-y-6">
