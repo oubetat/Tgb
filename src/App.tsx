@@ -3109,6 +3109,18 @@ function AppContent() {
 }
 
 export default function App() {
+  useEffect(() => {
+    // Force redirect to Netlify for stability on mobile/DNS issues
+    const API_URL = import.meta.env.VITE_API_URL || "https://tgbfinale.netlify.app/";
+    
+    if (window.location.hostname !== "tgbfinale.netlify.app" && 
+        !window.location.hostname.includes("localhost") &&
+        !window.location.hostname.includes("127.0.0.1")) {
+      console.log(`Redirecting to stable build at ${API_URL}...`);
+      window.location.replace(API_URL);
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <AppContent />
