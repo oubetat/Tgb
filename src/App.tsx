@@ -197,9 +197,17 @@ interface Transaction {
   currency: string;
   description: string;
   timestamp: any;
-  status: 'completed' | 'pending' | 'failed';
+  status: 'completed' | 'pending' | 'failed' | 'cancelled';
   txid?: string;
   paymentId?: string;
+  sender?: string;
+  receiver?: string;
+  notes?: string;
+  fromCurrency?: string;
+  toCurrency?: string;
+  fromAmount?: number;
+  toAmount?: number;
+  rate?: number;
 }
 
 interface Card {
@@ -343,6 +351,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           console.log("Setting up snapshots...");
+          // Subscribe to user data
+          onSnapshot(userDocRef, (snapshot) => {
+            if (snapshot.exists()) {
+              console.log("User data snapshot received");
+              setUserData(snapshot.data() as UserData);
+            }
+          }, (err) => console.error("User data snapshot error:", err));
+
           // Subscribe to wallet
           onSnapshot(doc(db, 'wallets', firebaseUser.uid), (snapshot) => {
             if (snapshot.exists()) {
@@ -448,7 +464,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
         
         console.log("Pi Auth successful:", piAuth.user.username);
-        const cred = await withTimeout(signInAnonymously(auth), 10000);
+        const cred = await withTimeout(signInAnonymously(auth), 20000);
         
         if (cred.user) {
           const userDocRef = doc(db, 'users', cred.user.uid);
@@ -459,12 +475,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             piUid: piAuth.user.uid,
             kycStatus: isRegistration ? 'pending' : 'verified',
             lastLogin: serverTimestamp()
-          }, { merge: true }), 5000);
+          }, { merge: true }), 10000);
           console.log("Pi User data synced to Firestore");
         }
       } else {
         console.warn("Pi SDK not found, falling back to anonymous login");
-        const cred = await withTimeout(signInAnonymously(auth), 10000);
+        const cred = await withTimeout(signInAnonymously(auth), 20000);
         
         if (cred.user && manualData) {
           console.log("Syncing manual data for user:", cred.user.uid);
@@ -476,7 +492,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             piUid: manualData.wallet,
             kycStatus: isRegistration ? 'pending' : 'verified',
             lastLogin: serverTimestamp()
-          }, { merge: true }), 5000);
+          }, { merge: true }), 10000);
           console.log("Manual User data synced to Firestore");
         }
       }
@@ -492,8 +508,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       // Fallback to local guest mode if Firebase is restricted
       console.log("Setting up local guest mode due to Firebase restriction...");
+      const guestId = "guest_" + Math.random().toString(36).substring(7);
+      const guestUser = { uid: guestId, isAnonymous: true } as FirebaseUser;
+      setUser(guestUser);
       setUserData({
-        uid: "guest_" + Math.random().toString(36).substring(7),
+        uid: guestId,
         email: "guest@tgb.com",
         displayName: manualData?.nickname || "Guest Pioneer",
         role: "pioneer",
@@ -501,7 +520,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         piUid: manualData?.wallet || ""
       });
       setWallet({
-        uid: "guest",
+        uid: guestId,
         balances: { PI: 1.25, USD: 0, DZD: 0 },
         lastUpdated: new Date()
       });
@@ -512,15 +531,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loginAsGuest = () => {
+    const guestId = "guest_" + Math.random().toString(36).substring(7);
+    const guestUser = { uid: guestId, isAnonymous: true } as FirebaseUser;
+    setUser(guestUser);
     setUserData({
-      uid: "guest_" + Math.random().toString(36).substring(7),
+      uid: guestId,
       email: "guest@tgb.com",
       displayName: "Guest Explorer",
       role: "pioneer",
       kycStatus: "verified"
     });
     setWallet({
-      uid: "guest",
+      uid: guestId,
       balances: { PI: 100, USD: 500, DZD: 75000 },
       lastUpdated: new Date()
     });
@@ -635,6 +657,13 @@ function AppContent() {
     market: true,
     security: true
   });
+  const [bankTransferAmount, setBankTransferAmount] = useState<number>(0);
+  const [bankTransferFrom, setBankTransferFrom] = useState<string>('TGB');
+  const [bankTransferTo, setBankTransferTo] = useState<string>('Chase Bank');
+  const [bankTransferLoading, setBankTransferLoading] = useState(false);
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+  const [txAmountRange, setTxAmountRange] = useState<{ min: number; max: number }>({ min: 0, max: 1000000 });
+  const [txDateRange, setTxDateRange] = useState<{ start: string; end: string }>({ start: '', end: '' });
 
   useEffect(() => {
     if (userData?.notificationSettings) {
@@ -656,6 +685,90 @@ function AppContent() {
     }
   };
 
+  const handleBankTransfer = async () => {
+    if (bankTransferAmount <= 0) return;
+    if (bankTransferFrom === bankTransferTo) return;
+    
+    setBankTransferLoading(true);
+    try {
+      if (user && wallet) {
+        const walletRef = doc(db, 'wallets', user.uid);
+        const amount = bankTransferAmount;
+        
+        if (bankTransferFrom === 'TGB') {
+          // Transfer from TGB to Bank
+          if (wallet.balances['PI'] < amount) {
+            console.error("Insufficient TGB balance");
+            setBankTransferLoading(false);
+            return;
+          }
+          
+          await updateDoc(walletRef, {
+            'balances.PI': increment(-amount)
+          });
+          
+          // Add transaction
+          await addDoc(collection(db, 'transactions'), {
+            uid: user.uid,
+            type: 'transfer',
+            amount: amount,
+            currency: 'PI',
+            description: `Transfer to ${bankTransferTo}`,
+            from: 'TGB Wallet',
+            to: bankTransferTo,
+            sender: user.uid,
+            receiver: bankTransferTo,
+            notes: 'Global Bank Transfer',
+            timestamp: serverTimestamp(),
+            status: 'pending'
+          });
+        } else if (bankTransferTo === 'TGB') {
+          // Transfer from Bank to TGB
+          await updateDoc(walletRef, {
+            'balances.PI': increment(amount)
+          });
+          
+          // Add transaction
+          await addDoc(collection(db, 'transactions'), {
+            uid: user.uid,
+            type: 'deposit',
+            amount: amount,
+            currency: 'PI',
+            description: `Deposit from ${bankTransferFrom}`,
+            from: bankTransferFrom,
+            to: 'TGB Wallet',
+            sender: bankTransferFrom,
+            receiver: user.uid,
+            notes: 'Bank Deposit',
+            timestamp: serverTimestamp(),
+            status: 'completed'
+          });
+        }
+        
+        setBankTransferAmount(0);
+        console.log("Bank transfer successful");
+      }
+    } catch (err) {
+      console.error("Bank transfer error:", err);
+    } finally {
+      setBankTransferLoading(false);
+    }
+  };
+
+  const handleCancelTransaction = async (txId: string) => {
+    if (user) {
+      try {
+        const txRef = doc(db, 'transactions', txId);
+        await updateDoc(txRef, {
+          status: 'cancelled'
+        });
+        console.log("Transaction cancelled");
+      } catch (err) {
+        console.error("Failed to cancel transaction:", err);
+      }
+    }
+  };
+
   const filteredTransactions = useMemo(() => {
     let result = [...transactions];
 
@@ -670,8 +783,29 @@ function AppContent() {
       result = result.filter(tx => 
         tx.description.toLowerCase().includes(query) || 
         tx.type.toLowerCase().includes(query) ||
-        (tx.txid && tx.txid.toLowerCase().includes(query))
+        (tx.txid && tx.txid.toLowerCase().includes(query)) ||
+        (tx.sender && tx.sender.toLowerCase().includes(query)) ||
+        (tx.receiver && tx.receiver.toLowerCase().includes(query))
       );
+    }
+
+    // Filter by amount range
+    result = result.filter(tx => Math.abs(tx.amount) >= txAmountRange.min && Math.abs(tx.amount) <= txAmountRange.max);
+
+    // Filter by date range
+    if (txDateRange.start) {
+      const start = new Date(txDateRange.start).getTime();
+      result = result.filter(tx => {
+        const txDate = tx.timestamp?.seconds ? tx.timestamp.seconds * 1000 : Date.now();
+        return txDate >= start;
+      });
+    }
+    if (txDateRange.end) {
+      const end = new Date(txDateRange.end).getTime() + 86400000; // End of day
+      result = result.filter(tx => {
+        const txDate = tx.timestamp?.seconds ? tx.timestamp.seconds * 1000 : Date.now();
+        return txDate <= end;
+      });
     }
 
     // Sort
@@ -686,7 +820,7 @@ function AppContent() {
     });
 
     return result;
-  }, [transactions, txFilterType, txSortBy, txSortOrder, txSearchQuery]);
+  }, [transactions, txFilterType, txSortBy, txSortOrder, txSearchQuery, txAmountRange, txDateRange]);
 
   const products: Product[] = [
     { id: '1', name: 'iPhone 15 Pro', price: 0.0032, image: 'https://picsum.photos/seed/iphone/400/400', category: 'Electronics', stock: 5 },
@@ -706,8 +840,8 @@ function AppContent() {
   ];
 
   const t = {
-    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates' },
-    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان' },
+    en: { balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates', bankTransfer: 'Bank Transfer', transferFrom: 'Transfer From', transferTo: 'Transfer To', tgbAccount: 'TGB Account', selectBank: 'Select Bank', amountToTransfer: 'Amount to Transfer', executeTransfer: 'Execute Transfer', transferSuccess: 'Transfer Successful', transferError: 'Transfer Failed' },
+    ar: { balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان', bankTransfer: 'تحويل بنكي', transferFrom: 'تحويل من', transferTo: 'تحويل إلى', tgbAccount: 'حساب TGB', selectBank: 'اختر البنك', amountToTransfer: 'المبلغ المراد تحويله', executeTransfer: 'تنفيذ التحويل', transferSuccess: 'تم التحويل بنجاح', transferError: 'فشل التحويل' },
     fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', exchangeHistory: 'Historique des échanges', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané', finance: 'Finance', lending: 'Prêt P2P', pools: 'Pools d\'Investissement', vault: 'Coffre Personnel', partnership: 'Partenariat Commercial', scanQr: 'Scanner QR', metrics: 'Métriques Globales Pi', totalSupply: 'Offre Totale', circulatingSupply: 'Offre Circulante', lockedSupply: 'Offre Verrouillée', activeCountries: 'Pays Actifs', connectedBanks: 'Banques Connectées', exchangeRates: 'Taux de Change Globaux', remittance: 'Remise Globale', gcvValue: 'Valeur de Consensus (GCV)', createLending: 'Créer une Demande de Prêt', loanAmount: 'Montant du Prêt (π)', loanApr: 'Taux d\'Intérêt (APR %)', loanPurpose: 'But du Prêt', addBank: 'Ajouter une Banque Globale', executeLoan: 'Exécuter le Prêt', joinPool: 'Rejoindre le Groupe', stakePi: 'Staker Pi pour Boost Rank', submitProposal: 'Soumettre une Proposition', comingSoon: 'Fonctionnalité Bientôt', copy: 'Copier', copied: 'Copié', logout: 'Déconnexion', settings: 'Paramètres', privacy: 'Confidentialité', language: 'Langue', bankDetails: 'Détails Bancaires', bankName: 'Nom de la Banque', accountNumber: 'Numéro de Compte', swiftCode: 'Code SWIFT/BIC', stakeAmount: 'Montant du Stake', stakeDuration: 'Durée (Mois)', joinPoolConfirm: 'Rejoindre le Pool d\'Investissement', poolContribution: 'Contribution (π)', confirm: 'Confirmer', cancel: 'Annuler' },
     es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Accividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', exchangeHistory: 'Historial de intercambios', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo', finance: 'Finanzas', lending: 'Préstamos P2P', pools: 'Fondos de Inversión', vault: 'Bóveda Personal', partnership: 'Asociación Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suministro Total', circulatingSupply: 'Suministro Circulante', lockedSupply: 'Suministro Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Tasas de Cambio Globales', remittance: 'Remesas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Crear Solicitud de Préstamo', loanAmount: 'Monto del Préstamo (π)', loanApr: 'Tasa de Interés (APR %)', loanPurpose: 'Propósito del Préstamo', addBank: 'Agregar Banco Global', executeLoan: 'Ejecutar Préstamo', joinPool: 'Unirse al Grupo', stakePi: 'Staker Pi para Subir Rango', submitProposal: 'Enviar Propuesta', comingSoon: 'Próximamente', copy: 'Copiar', copied: 'Copiado', logout: 'Cerrar Sesión', settings: 'Ajustes', privacy: 'Privacidad', language: 'Idioma', bankDetails: 'Detalles Bancarios', bankName: 'Nombre del Banco', accountNumber: 'Número de Cuenta', swiftCode: 'Código SWIFT/BIC', stakeAmount: 'Monto de Stake', stakeDuration: 'Duración (Meses)', joinPoolConfirm: 'Unirse al Fondo de Inversión', poolContribution: 'Contribución (π)', confirm: 'Confirmar', cancel: 'Cancelar' },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', exchangeHistory: 'Amazray n ubeddel', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt', bankDetails: 'Talɣut n lbank', bankName: 'Isem n lbank', accountNumber: 'Uṭṭun n uselmed', swiftCode: 'SWIFT/BIC', stakeAmount: 'Azal n users', stakeDuration: 'Tanzagt (Agguren)', joinPoolConfirm: 'Ddu ɣer ugraw n usfari', poolContribution: 'Asiwel (π)', confirm: 'Sentem', cancel: 'Sefsex' },
@@ -800,8 +934,11 @@ function AppContent() {
         amount: type === 'deposit' ? amount : -amount,
         currency,
         description: desc,
+        sender: user.uid,
+        receiver: recipientUid || 'System',
+        notes: type === 'transfer' ? `Transfer to ${recipientUid}` : `Wallet ${type}`,
         timestamp: serverTimestamp(),
-        status: 'completed'
+        status: type === 'transfer' ? 'pending' : 'completed'
       });
 
       setTxSuccess(true);
@@ -849,14 +986,19 @@ function AppContent() {
       await addDoc(collection(db, 'transactions'), {
         uid: user.uid,
         type: 'exchange',
+        amount: toAmount,
+        currency: toSymbol,
         fromAmount: fromAmount,
         fromCurrency: fromSymbol,
         toAmount: toAmount,
         toCurrency: toSymbol,
         rate: fromPrice / toPrice,
         description: `Exchanged ${fromAmount} ${fromSymbol} for ${toAmount.toFixed(6)} ${toSymbol}`,
+        sender: 'TGB Exchange',
+        receiver: user.uid,
+        notes: `Exchange Rate: 1 ${fromSymbol} = ${(fromPrice / toPrice).toFixed(6)} ${toSymbol}`,
         timestamp: serverTimestamp(),
-        status: 'completed'
+        status: 'pending'
       });
 
       setTxSuccess(true);
@@ -1030,6 +1172,9 @@ function AppContent() {
               amount: -product.price,
               currency: 'PI',
               description: `Purchased ${product.name} (Blockchain)`,
+              sender: user.uid,
+              receiver: 'TGB Shop',
+              notes: `Product: ${product.name}`,
               txid: txid,
               timestamp: serverTimestamp(),
               status: 'completed'
@@ -1079,6 +1224,9 @@ function AppContent() {
           amount: -product.price,
           currency: 'PI',
           description: `Purchased ${product.name}`,
+          sender: user.uid,
+          receiver: 'TGB Shop',
+          notes: `Product: ${product.name}`,
           timestamp: serverTimestamp(),
           status: 'completed'
         });
@@ -1183,6 +1331,9 @@ function AppContent() {
               amount: piAmount,
               currency: 'PI',
               description: `Bought Pi with ${usdAmount} USD`,
+              sender: 'TGB Exchange',
+              receiver: user.uid,
+              notes: `Payment ID: ${paymentId}`,
               txid: txid,
               paymentId: paymentId,
               timestamp: serverTimestamp(),
@@ -1225,6 +1376,9 @@ function AppContent() {
         amount: piAmount,
         currency: 'PI',
         description: `Bought Pi with ${usdAmount} USD (Demo Mode)`,
+        sender: 'TGB Exchange',
+        receiver: user.uid,
+        notes: 'Demo Mode Purchase',
         timestamp: serverTimestamp(),
         status: 'completed'
       });
@@ -1445,16 +1599,7 @@ function AppContent() {
                     setActiveModal('notification');
                     return;
                   }
-                  // Simulation of KYC Activation via Wallet
-                  setNotification({ 
-                    title: 'KYC Activation', 
-                    message: 'Requesting KYC activation via Pi Wallet... Please confirm the request in your Pi Browser if prompted.' 
-                  });
-                  setActiveModal('notification');
-                  
-                  setTimeout(async () => {
-                    await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname }, true);
-                  }, 2000);
+                  await loginWithPi({ wallet: loginWalletAddress, nickname: loginNickname }, true);
                 }} 
                 className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-95 shadow-lg shadow-indigo-500/20 group"
               >
@@ -1487,6 +1632,54 @@ function AppContent() {
             </p>
           </div>
         </motion.div>
+
+        {/* Login Screen Modals */}
+        <Modal isOpen={!!activeModal} onClose={() => setActiveModal(null)} title={activeModal === 'notification' ? notification.title : 'Notification'}>
+          {activeModal === 'notification' && (
+            <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
+              <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-10 h-10 text-amber-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold">{notification.title}</h3>
+                <p className="text-slate-400">{notification.message}</p>
+              </div>
+              <button 
+                onClick={() => setActiveModal(null)}
+                className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-2xl transition-all"
+              >
+                Close
+              </button>
+            </div>
+          )}
+          {activeModal === 'language' && (
+            <div className="grid grid-cols-2 gap-3 py-4">
+              {[
+                { id: 'en', label: 'English' },
+                { id: 'ar', label: 'العربية' },
+                { id: 'fr', label: 'Français' },
+                { id: 'es', label: 'Español' },
+                { id: 'kab', label: 'Taqbaylit' },
+                { id: 'ko', label: '한국어' },
+                { id: 'zh', label: '中文' },
+                { id: 'ja', label: '日本語' },
+                { id: 'it', label: 'Italiano' },
+                { id: 'pt', label: 'Português' }
+              ].map((l) => (
+                <button 
+                  key={l.id}
+                  onClick={() => {
+                    setLang(l.id as any);
+                    setActiveModal(null);
+                  }}
+                  className={`p-4 rounded-2xl text-sm font-bold border transition-all ${lang === l.id ? 'bg-amber-500 border-amber-500 text-slate-950 shadow-xl shadow-amber-500/20' : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-600'}`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </Modal>
       </div>
     );
   }
@@ -1719,6 +1912,49 @@ function AppContent() {
                           </div>
                         </div>
                       </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Amount Range */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Amount Range (π)</label>
+                          <div className="flex items-center space-x-2">
+                            <input 
+                              type="number" 
+                              placeholder="Min"
+                              value={txAmountRange.min || ''}
+                              onChange={(e) => setTxAmountRange(prev => ({ ...prev, min: parseFloat(e.target.value) || 0 }))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-2 text-xs focus:border-amber-500 outline-none"
+                            />
+                            <span className="text-slate-600">-</span>
+                            <input 
+                              type="number" 
+                              placeholder="Max"
+                              value={txAmountRange.max === 1000000 ? '' : txAmountRange.max}
+                              onChange={(e) => setTxAmountRange(prev => ({ ...prev, max: parseFloat(e.target.value) || 1000000 }))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-2 text-xs focus:border-amber-500 outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Date Range */}
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Date Range</label>
+                          <div className="flex items-center space-x-2">
+                            <input 
+                              type="date" 
+                              value={txDateRange.start}
+                              onChange={(e) => setTxDateRange(prev => ({ ...prev, start: e.target.value }))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-2 text-[10px] focus:border-amber-500 outline-none"
+                            />
+                            <input 
+                              type="date" 
+                              value={txDateRange.end}
+                              onChange={(e) => setTxDateRange(prev => ({ ...prev, end: e.target.value }))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-xl py-1.5 px-2 text-[10px] focus:border-amber-500 outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -1726,42 +1962,120 @@ function AppContent() {
 
               <div className="space-y-3">
                 {filteredTransactions.length > 0 ? filteredTransactions.map((tx) => (
-                  <div key={tx.id} className="bg-slate-900/50 p-4 rounded-2xl flex items-center justify-between border border-slate-800/50">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center">
-                        {tx.type === 'deposit' ? <ArrowDownLeft className="w-5 h-5 text-emerald-500" /> : 
-                         tx.type === 'withdraw' ? <ArrowUpRight className="w-5 h-5 text-rose-500" /> :
-                         tx.type === 'shop' ? <ShoppingBag className="w-5 h-5 text-amber-500" /> :
-                         <RefreshCw className="w-5 h-5 text-blue-500" />}
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm capitalize">{tx.type}</p>
-                        <p className="text-xs text-slate-500">{tx.description}</p>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-[10px] text-slate-600">
-                            {tx.timestamp?.seconds ? new Date(tx.timestamp.seconds * 1000).toLocaleDateString() : 'Recent'}
-                          </span>
-                          {tx.txid && (
-                            <a 
-                              href={`https://minepi.com/blockexplorer/testnet/transaction/${tx.txid}`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-[10px] text-amber-500 hover:underline flex items-center"
-                            >
-                              <Link className="w-3 h-3 mr-1" />
-                              {tx.txid.slice(0, 8)}...
-                            </a>
-                          )}
+                  <motion.div 
+                    layout
+                    key={tx.id} 
+                    className={`bg-slate-900/50 rounded-2xl border border-slate-800/50 overflow-hidden transition-all ${expandedTxId === tx.id ? 'ring-1 ring-amber-500/50' : ''}`}
+                  >
+                    <div 
+                      onClick={() => setExpandedTxId(expandedTxId === tx.id ? null : tx.id)}
+                      className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-800/30 transition-colors"
+                    >
+                      <div className="flex items-center space-x-4">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                          tx.type === 'deposit' ? 'bg-emerald-500/10 text-emerald-500' : 
+                          tx.type === 'withdraw' ? 'bg-rose-500/10 text-rose-500' :
+                          tx.type === 'shop' ? 'bg-amber-500/10 text-amber-500' :
+                          tx.type === 'transfer' ? 'bg-blue-500/10 text-blue-500' :
+                          'bg-indigo-500/10 text-indigo-500'
+                        }`}>
+                          {tx.type === 'deposit' ? <ArrowDownLeft className="w-5 h-5" /> : 
+                           tx.type === 'withdraw' ? <ArrowUpRight className="w-5 h-5" /> :
+                           tx.type === 'shop' ? <ShoppingBag className="w-5 h-5" /> :
+                           tx.type === 'transfer' ? <Send className="w-5 h-5" /> :
+                           <RefreshCw className="w-5 h-5" />}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm capitalize">{tx.type}</p>
+                          <p className="text-xs text-slate-500 truncate max-w-[150px]">{tx.description}</p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className="text-[10px] text-slate-600">
+                              {tx.timestamp?.seconds ? new Date(tx.timestamp.seconds * 1000).toLocaleDateString() : 'Recent'}
+                            </span>
+                            {tx.status === 'pending' && (
+                              <span className="flex items-center space-x-1 text-[10px] text-amber-500 animate-pulse">
+                                <Loader2 className="w-2 h-2 animate-spin" />
+                                <span>Pending</span>
+                              </span>
+                            )}
+                            {tx.status === 'cancelled' && (
+                              <span className="text-[10px] text-rose-500 font-bold uppercase tracking-widest">Cancelled</span>
+                            )}
+                          </div>
                         </div>
                       </div>
+                      <div className="text-right">
+                        <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-emerald-500' : 'text-white'}`}>{tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(4)} {tx.currency || 'π'}</p>
+                        <p className={`text-[10px] uppercase tracking-tighter font-bold ${
+                          tx.status === 'completed' ? 'text-emerald-500/70' : 
+                          tx.status === 'pending' ? 'text-amber-500/70' : 
+                          tx.status === 'cancelled' ? 'text-rose-500/70' : 'text-slate-500'
+                        }`}>{tx.status || 'Completed'}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`font-bold text-sm ${tx.amount > 0 ? 'text-emerald-500' : 'text-white'}`}>{tx.amount > 0 ? '+' : ''}{tx.amount.toFixed(4)} {tx.currency || 'π'}</p>
-                      <p className="text-[10px] text-slate-500 uppercase tracking-tighter">{tx.status || 'Completed'}</p>
-                    </div>
-                  </div>
+
+                    <AnimatePresence>
+                      {expandedTxId === tx.id && (
+                        <motion.div 
+                          initial={{ height: 0 }}
+                          animate={{ height: 'auto' }}
+                          exit={{ height: 0 }}
+                          className="overflow-hidden bg-slate-950/30 border-t border-slate-800/50"
+                        >
+                          <div className="p-4 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sender</p>
+                                <p className="text-xs text-slate-300 font-mono break-all">{tx.sender || 'System'}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Receiver</p>
+                                <p className="text-xs text-slate-300 font-mono break-all">{tx.receiver || 'You'}</p>
+                              </div>
+                            </div>
+                            
+                            {tx.notes && (
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Notes</p>
+                                <p className="text-xs text-slate-400 italic">"{tx.notes}"</p>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between pt-2">
+                              {tx.txid ? (
+                                <a 
+                                  href={`https://minepi.com/blockexplorer/testnet/transaction/${tx.txid}`} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] text-amber-500 hover:text-amber-400 flex items-center bg-amber-500/5 px-3 py-1.5 rounded-lg border border-amber-500/10 transition-colors"
+                                >
+                                  <Link className="w-3 h-3 mr-2" />
+                                  View on Blockchain
+                                </a>
+                              ) : <div />}
+
+                              {(tx.status === 'pending' && (tx.type === 'transfer' || tx.type === 'exchange')) && (
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelTransaction(tx.id);
+                                  }}
+                                  className="text-[10px] font-bold text-rose-500 hover:bg-rose-500/10 px-4 py-1.5 rounded-lg border border-rose-500/20 transition-all uppercase tracking-widest"
+                                >
+                                  Cancel Transaction
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
                 )) : (
-                  <div className="text-center py-8 text-slate-600 italic">No transactions found</div>
+                  <div className="text-center py-12 bg-slate-900/30 rounded-3xl border border-dashed border-slate-800">
+                    <Activity className="w-12 h-12 text-slate-800 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">No transactions found matching your filters</p>
+                  </div>
                 )}
               </div>
             </section>
@@ -1964,6 +2278,74 @@ function AppContent() {
                   <Plus className="w-5 h-5" />
                   <span>{t.addBank}</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Bank Transfer Section */}
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 space-y-6">
+              <div className="flex items-center space-x-3">
+                <div className="p-3 bg-amber-500/10 rounded-2xl">
+                  <ArrowUpDown className="w-6 h-6 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">{t.bankTransfer}</h3>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Move funds between accounts</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-2">{t.transferFrom}</label>
+                    <select 
+                      value={bankTransferFrom}
+                      onChange={(e) => setBankTransferFrom(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 font-bold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    >
+                      <option value="TGB">{t.tgbAccount}</option>
+                      <option value="Chase Bank">Chase Bank</option>
+                      <option value="HSBC">HSBC</option>
+                      <option value="KakaoBank">KakaoBank</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-2">{t.transferTo}</label>
+                    <select 
+                      value={bankTransferTo}
+                      onChange={(e) => setBankTransferTo(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 font-bold text-white focus:outline-none focus:border-amber-500 transition-colors"
+                    >
+                      <option value="TGB">{t.tgbAccount}</option>
+                      <option value="Chase Bank">Chase Bank</option>
+                      <option value="HSBC">HSBC</option>
+                      <option value="KakaoBank">KakaoBank</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-2">{t.amountToTransfer}</label>
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        value={bankTransferAmount || ''} 
+                        onChange={(e) => setBankTransferAmount(parseFloat(e.target.value) || 0)}
+                        placeholder="0.00" 
+                        className="w-full bg-slate-950 border border-slate-800 rounded-2xl p-4 text-lg font-bold focus:outline-none focus:border-amber-500 transition-colors" 
+                      />
+                      <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 font-bold">π</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleBankTransfer}
+                    disabled={bankTransferLoading || bankTransferAmount <= 0 || bankTransferFrom === bankTransferTo}
+                    className="w-full py-4 bg-amber-500 text-slate-950 font-bold rounded-2xl hover:bg-amber-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                  >
+                    {bankTransferLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                    <span>{t.executeTransfer}</span>
+                  </button>
+                </div>
               </div>
             </div>
 
