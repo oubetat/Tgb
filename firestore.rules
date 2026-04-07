@@ -64,6 +64,7 @@ service cloud.firestore {
              data.role in ['pioneer', 'global', 'admin'] &&
              (!('kycStatus' in data) || data.kycStatus in ['none', 'pending', 'verified', 'rejected']) &&
              (!('piUid' in data) || data.piUid is string) &&
+             (!('piWalletAddress' in data) || data.piWalletAddress is string) &&
              (!('firstName' in data) || data.firstName is string) &&
              (!('lastName' in data) || data.lastName is string) &&
              (!('dob' in data) || data.dob is string) &&
