@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   X,
   Languages,
+  LayoutDashboard,
   Copy,
   Link,
   TrendingDown,
@@ -258,6 +259,38 @@ interface PiMetrics {
   lastUpdated: any;
 }
 
+interface PTGContract {
+  id: string;
+  ptgId: string;
+  buyerUid: string;
+  sellerUid: string;
+  amount: number;
+  currency: 'pi' | 'usd';
+  status: 'draft' | 'active' | 'completed' | 'cancelled';
+  lcId?: string;
+  createdAt: any;
+}
+
+interface LetterOfCredit {
+  id: string;
+  contractId: string;
+  issuerUid: string;
+  applicantUid: string;
+  beneficiaryUid: string;
+  amount: number;
+  status: 'issued' | 'docs_received' | 'docs_verified' | 'paid' | 'cancelled';
+  expiryDate: any;
+  createdAt: any;
+}
+
+interface AuditLog {
+  id: string;
+  relatedId: string;
+  action: string;
+  details: string;
+  timestamp: any;
+}
+
 interface AuthContextType {
   user: FirebaseUser | null;
   userData: UserData | null;
@@ -265,6 +298,9 @@ interface AuthContextType {
   transactions: Transaction[];
   cards: Card[];
   stakes: any[];
+  contracts: PTGContract[];
+  lcs: LetterOfCredit[];
+  auditLogs: AuditLog[];
   loading: boolean;
   error: string | null;
   loginWithGoogle: () => Promise<void>;
@@ -292,6 +328,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cards, setCards] = useState<Card[]>([]);
   const [stakes, setStakes] = useState<any[]>([]);
+  const [contracts, setContracts] = useState<PTGContract[]>([]);
+  const [lcs, setLcs] = useState<LetterOfCredit[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -408,6 +447,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const ss = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as any));
             setStakes(ss);
           }, (err) => console.error("Stakes snapshot error:", err));
+
+          // Subscribe to PTG contracts
+          const ctq = query(collection(db, 'contracts'), where('buyerUid', '==', firebaseUser.uid));
+          onSnapshot(ctq, (snapshot) => {
+            const cts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PTGContract));
+            setContracts(cts);
+          }, (err) => console.error("Contracts snapshot error:", err));
+
+          // Subscribe to LCs
+          const lcq = query(collection(db, 'letters_of_credit'), where('applicantUid', '==', firebaseUser.uid));
+          onSnapshot(lcq, (snapshot) => {
+            const ls = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as LetterOfCredit));
+            setLcs(ls);
+          }, (err) => console.error("LCs snapshot error:", err));
+
+          // Subscribe to Audit Logs
+          const alq = query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(20));
+          onSnapshot(alq, (snapshot) => {
+            const logs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as AuditLog));
+            setAuditLogs(logs);
+          }, (err) => console.error("Audit logs snapshot error:", err));
 
         } catch (err) {
           console.error("Sync error:", err);
@@ -605,7 +665,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, stakes, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
+    <AuthContext.Provider value={{ user, userData, wallet, transactions, cards, stakes, contracts, lcs, auditLogs, loading, error, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions }}>
       {children}
     </AuthContext.Provider>
   );
@@ -659,12 +719,12 @@ interface Product {
 }
 
 function AppContent() {
-  const { user, userData, wallet, transactions, cards, stakes, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
+  const { user, userData, wallet, transactions, cards, stakes, contracts, lcs, auditLogs, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [loginWalletAddress, setLoginWalletAddress] = useState('');
   const [loginNickname, setLoginNickname] = useState('');
-  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | 'registration' | null>(null);
+  const [activeModal, setActiveModal] = useState<'transfer' | 'withdraw' | 'deposit' | 'shop' | 'card' | 'exchange' | 'partnership' | 'lending' | 'notification' | 'bank' | 'stake' | 'pool' | 'language' | 'executeLoan' | 'bankPortal' | 'groupApp' | 'kyc' | 'registration' | 'ptgTrade' | null>(null);
   const [regStep, setRegStep] = useState(1);
   const [regData, setRegData] = useState({
     firstName: '',
@@ -922,18 +982,18 @@ function AppContent() {
     en: { 
       balance: 'Total Portfolio', actions: 'Quick Actions', market: 'Market Insights', activity: 'Recent Activity', deposit: 'Deposit', withdraw: 'Withdraw', transfer: 'Transfer', shop: 'Shop', card: 'Request Visa Card', profile: 'Profile', store: 'Store', copyUid: 'Copy UID', uidCopied: 'UID Copied!', exchange: 'Global Exchange', exchangeHistory: 'Exchange History', buyPi: 'Buy Pi', sellPi: 'Sell Pi', kyc: 'KYC Verification', kycRequired: 'KYC Required for Global Users', kycPending: 'KYC Pending Review', kycVerified: 'KYC Verified', connectedExchanges: 'Connected Exchanges & Wallets', globalConnectivity: 'Global Connectivity', connected: 'Connected', disconnected: 'Disconnected', networkStatus: 'Network Status', mainnetSettlement: 'Mainnet Settlement', instant: 'Instant', finance: 'Finance', lending: 'P2P Lending', pools: 'Investment Pools', vault: 'Personal Vault', partnership: 'Business Partnership', scanQr: 'Scan QR', metrics: 'Global Pi Metrics', totalSupply: 'Total Supply', circulatingSupply: 'Circulating Supply', lockedSupply: 'Locked Supply', activeCountries: 'Active Countries', connectedBanks: 'Connected Banks', exchangeRates: 'Global Exchange Rates', remittance: 'Global Remittance', gcvValue: 'Consensus Value (GCV)', createLending: 'Create Lending Request', loanAmount: 'Loan Amount (π)', loanApr: 'Interest Rate (APR %)', loanPurpose: 'Purpose of Loan', addBank: 'Add Global Bank', executeLoan: 'Execute Loan', joinPool: 'Join Group', stakePi: 'Stake Pi to Boost Rank', submitProposal: 'Submit Business Proposal', comingSoon: 'Feature Coming Soon', copy: 'Copy', copied: 'Copied', logout: 'Logout', settings: 'Settings', privacy: 'Privacy & Security', language: 'Language', bankDetails: 'Bank Details', bankName: 'Bank Name', accountNumber: 'Account Number', swiftCode: 'SWIFT/BIC', stakeAmount: 'Stake Amount', stakeDuration: 'Duration (Months)', joinPoolConfirm: 'Join Investment Pool', poolContribution: 'Contribution (π)', confirm: 'Confirm', cancel: 'Cancel', staking: 'Pi Staking', stakedAmount: 'Staked Amount', estimatedApy: 'Estimated APY', lockDuration: 'Lock Duration', stakingHistory: 'Staking History', activeStakes: 'Active Stakes', noStakes: 'No active stakes found.', months: 'Months', stakingCalculator: 'Staking Calculator', estimateRewards: 'Estimate Rewards', potentialEarnings: 'Potential Earnings', totalReturn: 'Total Return', notifications: 'Notification Preferences', transactionAlerts: 'Transaction Alerts', marketAlerts: 'Market Changes', securityAlerts: 'Security Updates', bankTransfer: 'Bank Transfer', transferFrom: 'Transfer From', transferTo: 'Transfer To', tgbAccount: 'TGB Account', selectBank: 'Select Bank', amountToTransfer: 'Amount to Transfer', executeTransfer: 'Execute Transfer', transferSuccess: 'Transfer Successful', transferError: 'Transfer Failed',
       login: 'Login', register: 'Register', guestTour: 'Guest Tour', walletAddress: 'Pi Wallet Address', nickname: 'Nickname', openAccount: 'Open New Account & KYC', pioneerConnection: 'Pioneer Connection', securedByPi: 'Secured by Pi Network KYC', termsOfService: 'Terms of Service', privacyPolicy: 'Privacy Policy', selectLanguage: 'Select Language',
-      insufficientFunds: 'Insufficient funds in your TGB wallet', invalidAmount: 'Invalid Amount', invalidAmountMsg: 'Please enter an amount greater than 0.', confirmAction: 'Confirm', walletQr: 'Your Wallet QR', walletAddressLabel: 'Wallet Address', addressCopied: 'Address copied!', scanQrNote: 'Scan this code to receive Pi instantly from any Pioneer.', businessProposal: 'Business Proposal', partnershipNote: 'TrustBank Global is looking for strategic partners. Submit your proposal to integrate your services.', companyName: 'Company Name', companyPlaceholder: 'Enter company name', proposalType: 'Proposal Type', ecommerce: 'E-commerce Integration', liquidity: 'Liquidity Provider', marketing: 'Marketing Partnership', other: 'Other', messageLabel: 'Message', messagePlaceholder: 'Describe your proposal...', copyPassphrase: 'Copy Passphrase', back: 'Back', finalConfirmation: 'Final Confirmation', confirmRegistration: 'Confirm Registration', finalStep: 'Final Step', nameLabel: 'Name', dobLabel: 'DOB', docTypeLabel: 'Document Type', walletReady: 'Wallet Ready', accountCreatedTitle: 'Account Created', accountCreatedMsg: 'Welcome to Trust Global Bank! Your account has been created and your KYC is now pending review.', completeRegistration: 'Complete Registration', personalIdentity: 'Personal Identity', step1of3: 'Step 1 of 3', fullLegalName: 'Full Legal Name', namePlaceholder: 'As shown on your ID', countryLabel: 'Country', continueToDocs: 'Continue to Documents', docVerification: 'Document Verification', step2of3: 'Step 2 of 3', passport: 'Passport', idCard: 'ID Card', driverLicense: 'Driver License', residencePermit: 'Residence Permit', uploadPhoto: 'Upload Document Photo', maxSizeNote: 'Max size: 5MB (JPG, PNG)', continueToBio: 'Continue to Biometrics', bioCheck: 'Biometric Liveness Check', bioNote: 'Position your face within the frame and ensure good lighting.', kycSubmittedTitle: 'KYC Submitted', kycSubmittedMsg: 'Your identity verification is being processed. This usually takes 5-10 minutes.', startScan: 'Start Scan', connectedBalance: 'Connected Balance', fiatValue: 'Fiat Value', viewStatement: 'View Bank Statement', instantRemittance: 'Instant Remittance', visitWebsite: 'Visit Official Website', currencyLabel: 'Currency', amountLabel: 'Amount', recipientLabel: 'Recipient UID or Wallet Address', descriptionLabel: 'Description', recipientPlaceholder: 'User UID or G... Address', notePlaceholder: 'Note', internalTransferNote: 'Note: This is an internal TGB transfer. To pay via Pi Blockchain, use the Pi Wallet app.', availableBalance: 'Available Balance'
+      insufficientFunds: 'Insufficient funds in your TGB wallet', invalidAmount: 'Invalid Amount', invalidAmountMsg: 'Please enter an amount greater than 0.', confirmAction: 'Confirm', walletQr: 'Your Wallet QR', walletAddressLabel: 'Wallet Address', addressCopied: 'Address copied!', scanQrNote: 'Scan this code to receive Pi instantly from any Pioneer.', businessProposal: 'Business Proposal', partnershipNote: 'TrustBank Global is looking for strategic partners. Submit your proposal to integrate your services.', companyName: 'Company Name', companyPlaceholder: 'Enter company name', proposalType: 'Proposal Type', ecommerce: 'E-commerce Integration', liquidity: 'Liquidity Provider', marketing: 'Marketing Partnership', other: 'Other', messageLabel: 'Message', messagePlaceholder: 'Describe your proposal...', copyPassphrase: 'Copy Passphrase', back: 'Back', finalConfirmation: 'Final Confirmation', confirmRegistration: 'Confirm Registration', finalStep: 'Final Step', nameLabel: 'Name', dobLabel: 'DOB', docTypeLabel: 'Document Type', walletReady: 'Wallet Ready', accountCreatedTitle: 'Account Created', accountCreatedMsg: 'Welcome to Trust Global Bank! Your account has been created and your KYC is now pending review.', completeRegistration: 'Complete Registration', personalIdentity: 'Personal Identity', step1of3: 'Step 1 of 3', fullLegalName: 'Full Legal Name', namePlaceholder: 'As shown on your ID', countryLabel: 'Country', continueToDocs: 'Continue to Documents', docVerification: 'Document Verification', step2of3: 'Step 2 of 3', passport: 'Passport', idCard: 'ID Card', driverLicense: 'Driver License', residencePermit: 'Residence Permit', uploadPhoto: 'Upload Document Photo', maxSizeNote: 'Max size: 5MB (JPG, PNG)', continueToBio: 'Continue to Biometrics', bioCheck: 'Biometric Liveness Check', bioNote: 'Position your face within the frame and ensure good lighting.', kycSubmittedTitle: 'KYC Submitted', kycSubmittedMsg: 'Your identity verification is being processed. This usually takes 5-10 minutes.', startScan: 'Start Scan', connectedBalance: 'Connected Balance', fiatValue: 'Fiat Value', viewStatement: 'View Bank Statement', instantRemittance: 'Instant Remittance', visitWebsite: 'Visit Official Website', currencyLabel: 'Currency', amountLabel: 'Amount', recipientLabel: 'Recipient UID or Wallet Address', descriptionLabel: 'Description', recipientPlaceholder: 'User UID or G... Address', notePlaceholder: 'Note', internalTransferNote: 'Note: This is an internal TGB transfer. To pay via Pi Blockchain, use the Pi Wallet app.', availableBalance: 'Available Balance', ptgTrade: 'PTG Trade Integration', ptgContracts: 'PTG Contracts', issueLC: 'Issue Letter of Credit', verifyDocs: 'Verify Documents', releaseFunds: 'Release Funds', contractId: 'Contract ID', ptgStatus: 'PTG Status', lcStatus: 'L/C Status', auditLog: 'Audit Log', noContracts: 'No PTG contracts found.', createContract: 'Simulate PTG Contract', buyer: 'Buyer', seller: 'Seller'
     },
     ar: { 
       balance: 'إجمالي المحفظة', actions: 'إجراءات سريعة', market: 'رؤى السوق', activity: 'النشاط الأخير', deposit: 'إيداع', withdraw: 'سحب', transfer: 'تحويل', shop: 'تسوق', card: 'طلب بطاقة فيزا', profile: 'الملف الشخصي', store: 'المتجر', copyUid: 'نسخ المعرف', uidCopied: 'تم النسخ!', exchange: 'تبادل عالمي', exchangeHistory: 'سجل التبادل', buyPi: 'شراء باي', sellPi: 'بيع باي', kyc: 'التحقق من الهوية', kycRequired: 'مطلوب التحقق للمستخدمين العالميين', kycPending: 'التحقق قيد المراجعة', kycVerified: 'تم التحقق', connectedExchanges: 'البورصات والمحافظ المتصلة', globalConnectivity: 'الاتصال العالمي', connected: 'متصل', disconnected: 'غير متصل', networkStatus: 'حالة الشبكة', mainnetSettlement: 'تسوية الشبكة الرئيسية', instant: 'فوري', finance: 'المالية', lending: 'الإقراض P2P', pools: 'صناديق الاستثمار', vault: 'الخزنة الشخصية', partnership: 'شراكة تجارية', scanQr: 'مسح QR', metrics: 'إحصائيات باي العالمية', totalSupply: 'إجمالي المعروض', circulatingSupply: 'المعروض المتداول', lockedSupply: 'المعروض المقفل', activeCountries: 'الدول النشطة', connectedBanks: 'البنوك المتصلة', exchangeRates: 'أسعار الصرف العالمية', remittance: 'الحوالات العالمية', gcvValue: 'قيمة التوافق (GCV)', createLending: 'إنشاء طلب إقراض', loanAmount: 'مبلغ القرض (π)', loanApr: 'نسبة الفائدة (APR %)', loanPurpose: 'الغرض من القرض', addBank: 'إضافة بنك عالمي', executeLoan: 'تنفيذ القرض', joinPool: 'انضمام للمجموعة', stakePi: 'تجميد Pi لرفع الرتبة', submitProposal: 'تقديم عرض تجاري', comingSoon: 'الميزة قريباً', copy: 'نسخ', copied: 'تم النسخ', logout: 'تسجيل الخروج', settings: 'الإعدادات', privacy: 'الخصوصية والأمان', language: 'اللغة', bankDetails: 'تفاصيل البنك', bankName: 'اسم البنك', accountNumber: 'رقم الحساب', swiftCode: 'رمز السويفت', stakeAmount: 'مبلغ التجميد', stakeDuration: 'المدة (أشهر)', joinPoolConfirm: 'الانضمام لصندوق استثمار', poolContribution: 'المساهمة (π)', confirm: 'تأكيد', cancel: 'إلغاء', staking: 'تجميد Pi', stakedAmount: 'المبلغ المجمد', estimatedApy: 'العائد السنوي المتوقع', lockDuration: 'مدة القفل', stakingHistory: 'سجل التجميد', activeStakes: 'التجميدات النشطة', noStakes: 'لا يوجد تجميد نشط.', months: 'أشهر', stakingCalculator: 'حاسبة التجميد', estimateRewards: 'تقدير المكافآت', potentialEarnings: 'الأرباح المحتملة', totalReturn: 'إجمالي العائد', notifications: 'تفضيلات التنبيهات', transactionAlerts: 'تنبيهات المعاملات', marketAlerts: 'تغيرات السوق', securityAlerts: 'تحديثات الأمان', bankTransfer: 'تحويل بنكي', transferFrom: 'تحويل من', transferTo: 'تحويل إلى', tgbAccount: 'حساب TGB', selectBank: 'اختر البنك', amountToTransfer: 'المبلغ المراد تحويله', executeTransfer: 'تنفيذ التحويل', transferSuccess: 'تم التحويل بنجاح', transferError: 'فشل التحويل',
       login: 'تسجيل الدخول', register: 'تسجيل', guestTour: 'جولة زائر', walletAddress: 'عنوان محفظة Pi', nickname: 'الاسم المستعار', openAccount: 'فتح حساب جديد و KYC', pioneerConnection: 'اتصال Pioneer', securedByPi: 'مؤمن بواسطة Pi Network KYC', termsOfService: 'شروط الخدمة', privacyPolicy: 'سياسة الخصوصية', selectLanguage: 'اختر اللغة',
-      insufficientFunds: 'رصيد غير كافٍ في محفظة TGB الخاصة بك', invalidAmount: 'مبلغ غير صالح', invalidAmountMsg: 'يرجى إدخال مبلغ أكبر من 0.', confirmAction: 'تأكيد', walletQr: 'رمز QR لمحفظتك', walletAddressLabel: 'عنوان المحفظة', addressCopied: 'تم نسخ العنوان!', scanQrNote: 'امسح هذا الرمز لتلقي Pi فوراً من أي Pioneer.', businessProposal: 'عرض تجاري', partnershipNote: 'تبحث TrustBank Global عن شركاء استراتيجيين. قدم عرضك لدمج خدماتك.', companyName: 'اسم الشركة', companyPlaceholder: 'أدخل اسم الشركة', proposalType: 'نوع العرض', ecommerce: 'تكامل التجارة الإلكترونية', liquidity: 'مزود السيولة', marketing: 'شراكة تسويقية', other: 'أخرى', messageLabel: 'الرسالة', messagePlaceholder: 'صف عرضك...', copyPassphrase: 'نسخ عبارة المرور', back: 'رجوع', finalConfirmation: 'التأكيد النهائي', confirmRegistration: 'تأكيد التسجيل', finalStep: 'الخطوة الأخيرة', nameLabel: 'الاسم', dobLabel: 'تاريخ الميلاد', docTypeLabel: 'نوع المستند', walletReady: 'المحفظة جاهزة', accountCreatedTitle: 'تم إنشاء الحساب', accountCreatedMsg: 'مرحباً بك في Trust Global Bank! تم إنشاء حسابك والتحقق من هويتك قيد المراجعة الآن.', completeRegistration: 'إكمال التسجيل', personalIdentity: 'الهوية الشخصية', step1of3: 'الخطوة 1 من 3', fullLegalName: 'الاسم القانوني الكامل', namePlaceholder: 'كما هو موضح في هويتك', countryLabel: 'البلد', continueToDocs: 'المتابعة إلى المستندات', docVerification: 'التحقق من المستندات', step2of3: 'الخطوة 2 من 3', passport: 'جواز سفر', idCard: 'بطاقة هوية', driverLicense: 'رخصة قيادة', residencePermit: 'تصريح إقامة', uploadPhoto: 'تحميل صورة المستند', maxSizeNote: 'الحد الأقصى للحجم: 5 ميجابايت (JPG, PNG)', continueToBio: 'المتابعة إلى القياسات الحيوية', bioCheck: 'فحص الحيوية البيومتري', bioNote: 'ضع وجهك داخل الإطار وتأكد من وجود إضاءة جيدة.', kycSubmittedTitle: 'تم تقديم KYC', kycSubmittedMsg: 'يتم معالجة التحقق من هويتك. يستغرق هذا عادةً 5-10 دقائق.', startScan: 'بدء المسح', connectedBalance: 'الرصيد المتصل', fiatValue: 'القيمة النقدية', viewStatement: 'عرض كشف الحساب البنكي', instantRemittance: 'حوالة فورية', visitWebsite: 'زيارة الموقع الرسمي', currencyLabel: 'العملة', amountLabel: 'المبلغ', recipientLabel: 'معرف المستلم أو عنوان المحفظة', descriptionLabel: 'الوصف', recipientPlaceholder: 'معرف المستخدم أو عنوان G...', notePlaceholder: 'ملاحظة', internalTransferNote: 'ملاحظة: هذا تحويل داخلي في TGB. للدفع عبر Pi Blockchain، استخدم تطبيق Pi Wallet.', availableBalance: 'الرصيد المتاح'
+      insufficientFunds: 'رصيد غير كافٍ في محفظة TGB الخاصة بك', invalidAmount: 'مبلغ غير صالح', invalidAmountMsg: 'يرجى إدخال مبلغ أكبر من 0.', confirmAction: 'تأكيد', walletQr: 'رمز QR لمحفظتك', walletAddressLabel: 'عنوان المحفظة', addressCopied: 'تم نسخ العنوان!', scanQrNote: 'امسح هذا الرمز لتلقي Pi فوراً من أي Pioneer.', businessProposal: 'عرض تجاري', partnershipNote: 'تبحث TrustBank Global عن شركاء استراتيجيين. قدم عرضك لدمج خدماتك.', companyName: 'اسم الشركة', companyPlaceholder: 'أدخل اسم الشركة', proposalType: 'نوع العرض', ecommerce: 'تكامل التجارة الإلكترونية', liquidity: 'مزود السيولة', marketing: 'شراكة تسويقية', other: 'أخرى', messageLabel: 'الرسالة', messagePlaceholder: 'صف عرضك...', copyPassphrase: 'نسخ عبارة المرور', back: 'رجوع', finalConfirmation: 'التأكيد النهائي', confirmRegistration: 'تأكيد التسجيل', finalStep: 'الخطوة الأخيرة', nameLabel: 'الاسم', dobLabel: 'تاريخ الميلاد', docTypeLabel: 'نوع المستند', walletReady: 'المحفظة جاهزة', accountCreatedTitle: 'تم إنشاء الحساب', accountCreatedMsg: 'مرحباً بك في Trust Global Bank! تم إنشاء حسابك والتحقق من هويتك قيد المراجعة الآن.', completeRegistration: 'إكمال التسجيل', personalIdentity: 'الهوية الشخصية', step1of3: 'الخطوة 1 من 3', fullLegalName: 'الاسم القانوني الكامل', namePlaceholder: 'كما هو موضح في هويتك', countryLabel: 'البلد', continueToDocs: 'المتابعة إلى المستندات', docVerification: 'التحقق من المستندات', step2of3: 'الخطوة 2 من 3', passport: 'جواز سفر', idCard: 'بطاقة هوية', driverLicense: 'رخصة قيادة', residencePermit: 'تصريح إقامة', uploadPhoto: 'تحميل صورة المستند', maxSizeNote: 'الحد الأقصى للحجم: 5 ميجابايت (JPG, PNG)', continueToBio: 'المتابعة إلى القياسات الحيوية', bioCheck: 'فحص الحيوية البيومتري', bioNote: 'ضع وجهك داخل الإطار وتأكد من وجود إضاءة جيدة.', kycSubmittedTitle: 'تم تقديم KYC', kycSubmittedMsg: 'يتم معالجة التحقق من هويتك. يستغرق هذا عادةً 5-10 دقائق.', startScan: 'بدء المسح', connectedBalance: 'الرصيد المتصل', fiatValue: 'القيمة النقدية', viewStatement: 'عرض كشف الحساب البنكي', instantRemittance: 'حوالة فورية', visitWebsite: 'زيارة الموقع الرسمي', currencyLabel: 'العملة', amountLabel: 'المبلغ', recipientLabel: 'معرف المستلم أو عنوان المحفظة', descriptionLabel: 'الوصف', recipientPlaceholder: 'معرف المستخدم أو عنوان G...', notePlaceholder: 'ملاحظة', internalTransferNote: 'ملاحظة: هذا تحويل داخلي في TGB. للدفع عبر Pi Blockchain، استخدم تطبيق Pi Wallet.', availableBalance: 'الرصيد المتاح', ptgTrade: 'تكامل تجارة PTG', ptgContracts: 'عقود PTG', issueLC: 'إصدار خطاب اعتماد', verifyDocs: 'التحقق من المستندات', releaseFunds: 'الإفراج عن الأموال', contractId: 'معرف العقد', ptgStatus: 'حالة PTG', lcStatus: 'حالة L/C', auditLog: 'سجل التدقيق', noContracts: 'لم يتم العثور على عقود PTG.', createContract: 'محاكاة عقد PTG', buyer: 'المشتري', seller: 'البائع'
     },
     fr: { balance: 'Portefeuille Total', actions: 'Actions Rapides', market: 'Aperçu du Marché', activity: 'Activité Récente', deposit: 'Dépôt', withdraw: 'Retrait', transfer: 'Transfert', shop: 'Boutique', card: 'Demander une carte Visa', profile: 'Profil', store: 'Boutique', copyUid: 'Copier UID', uidCopied: 'UID Copié!', exchange: 'Échange Global', exchangeHistory: 'Historique des échanges', buyPi: 'Acheter Pi', sellPi: 'Vendre Pi', kyc: 'Vérification KYC', kycRequired: 'KYC requis', kycPending: 'KYC en attente', kycVerified: 'KYC vérifié', connectedExchanges: 'Échanges et Portefeuilles', globalConnectivity: 'Connectivité Globale', connected: 'Connecté', disconnected: 'Déconnecté', networkStatus: 'État du Réseau', mainnetSettlement: 'Règlement Mainnet', instant: 'Instantané', finance: 'Finance', lending: 'Prêt P2P', pools: 'Pools d\'Investissement', vault: 'Coffre Personnel', partnership: 'Partenariat Commercial', scanQr: 'Scanner QR', metrics: 'Métriques Globales Pi', totalSupply: 'Offre Totale', circulatingSupply: 'Offre Circulante', lockedSupply: 'Offre Verrouillée', activeCountries: 'Pays Actifs', connectedBanks: 'Banques Connectées', exchangeRates: 'Taux de Change Globaux', remittance: 'Remise Globale', gcvValue: 'Valeur de Consensus (GCV)', createLending: 'Créer une Demande de Prêt', loanAmount: 'Montant du Prêt (π)', loanApr: 'Taux d\'Intérêt (APR %)', loanPurpose: 'But du Prêt', addBank: 'Ajouter une Banque Globale', executeLoan: 'Éxécuter le Prêt', joinPool: 'Rejoindre le Groupe', stakePi: 'Staker Pi pour Boost Rank', submitProposal: 'Soumettre une Proposition', comingSoon: 'Fonctionnalité Bientôt', copy: 'Copier', copied: 'Copié', logout: 'Déconnexion', settings: 'Paramètres', privacy: 'Confidentialité', language: 'Langue', bankDetails: 'Détails Bancaires', bankName: 'Nom de la Banque', accountNumber: 'Numéro de Compte', swiftCode: 'Code SWIFT/BIC', stakeAmount: 'Montant du Stake', stakeDuration: 'Durée (Mois)', joinPoolConfirm: 'Rejoindre le Pool d\'Investissement', poolContribution: 'Contribution (π)', confirm: 'Confirmer', cancel: 'Annuler',
-      insufficientFunds: 'Fonds insuffisants dans votre portefeuille TGB', invalidAmount: 'Montant invalide', invalidAmountMsg: 'Veuillez entrer un montant supérieur à 0.', confirmAction: 'Confirmer', walletQr: 'QR de votre portefeuille', walletAddressLabel: 'Adresse du portefeuille', addressCopied: 'Adresse copiée !', scanQrNote: 'Scannez ce code pour recevoir des Pi instantanément de n\'importe quel Pioneer.', businessProposal: 'Proposition commerciale', partnershipNote: 'TrustBank Global recherche des partenaires stratégiques. Soumettez votre proposition pour intégrer vos services.', companyName: 'Nom de l\'entreprise', companyPlaceholder: 'Entrez le nom de l\'entreprise', proposalType: 'Type de proposition', ecommerce: 'Intégration E-commerce', liquidity: 'Fournisseur de liquidité', marketing: 'Partenariat marketing', other: 'Autre', messageLabel: 'Message', messagePlaceholder: 'Décrivez votre proposition...', copyPassphrase: 'Copier la phrase de passe', back: 'Retour', finalConfirmation: 'Confirmation finale', confirmRegistration: 'Confirmer l\'inscription', finalStep: 'Dernière étape', nameLabel: 'Nom', dobLabel: 'Date de naissance', docTypeLabel: 'Type de document', walletReady: 'Portefeuille prêt', accountCreatedTitle: 'Compte créé', accountCreatedMsg: 'Bienvenue à Trust Global Bank ! Votre compte a été créé et votre KYC est en attente de révision.', completeRegistration: 'Terminer l\'inscription', personalIdentity: 'Identité personnelle', step1of3: 'Étape 1 sur 3', fullLegalName: 'Nom légal complet', namePlaceholder: 'Tel qu\'indiqué sur votre pièce d\'identité', countryLabel: 'Pays', continueToDocs: 'Continuer vers les documents', docVerification: 'Vérification des documents', step2of3: 'Étape 2 sur 3', passport: 'Passeport', idCard: 'Carte d\'identité', driverLicense: 'Permis de conduire', residencePermit: 'Permis de résidence', uploadPhoto: 'Télécharger la photo du document', maxSizeNote: 'Taille max : 5 Mo (JPG, PNG)', continueToBio: 'Continuer vers la biométrie', bioCheck: 'Vérification de la vivacité biométrique', bioNote: 'Positionnez votre visage dans le cadre et assurez un bon éclairage.', kycSubmittedTitle: 'KYC soumis', kycSubmittedMsg: 'Votre vérification d\'identité est en cours de traitement. Cela prend généralement 5 à 10 minutes.', startScan: 'Démarrer le scan', connectedBalance: 'Solde connecté', fiatValue: 'Valeur Fiat', viewStatement: 'Voir le relevé bancaire', instantRemittance: 'Remise instantanée', visitWebsite: 'Visiter le site officiel', currencyLabel: 'Devise', amountLabel: 'Montant', recipientLabel: 'UID du destinataire ou adresse du portefeuille', descriptionLabel: 'Description', recipientPlaceholder: 'UID utilisateur ou adresse G...', notePlaceholder: 'Note', internalTransferNote: 'Note : Il s\'agit d\'un transfert interne TGB. Pour payer via la blockchain Pi, utilisez l\'application Pi Wallet.', availableBalance: 'Solde disponible'
+      insufficientFunds: 'Fonds insuffisants dans votre portefeuille TGB', invalidAmount: 'Montant invalide', invalidAmountMsg: 'Veuillez entrer un montant supérieur à 0.', confirmAction: 'Confirmer', walletQr: 'QR de votre portefeuille', walletAddressLabel: 'Adresse du portefeuille', addressCopied: 'Adresse copiée !', scanQrNote: 'Scannez ce code pour recevoir des Pi instantanément de n\'importe quel Pioneer.', businessProposal: 'Proposition commerciale', partnershipNote: 'TrustBank Global recherche des partenaires stratégiques. Soumettez votre proposition pour intégrer vos services.', companyName: 'Nom de l\'entreprise', companyPlaceholder: 'Entrez le nom de l\'entreprise', proposalType: 'Type de proposition', ecommerce: 'Intégration E-commerce', liquidity: 'Fournisseur de liquidité', marketing: 'Partenariat marketing', other: 'Autre', messageLabel: 'Message', messagePlaceholder: 'Décrivez votre proposition...', copyPassphrase: 'Copier la phrase de passe', back: 'Retour', finalConfirmation: 'Confirmation finale', confirmRegistration: 'Confirmer l\'inscription', finalStep: 'Dernière étape', nameLabel: 'Nom', dobLabel: 'Date de naissance', docTypeLabel: 'Type de document', walletReady: 'Portefeuille prêt', accountCreatedTitle: 'Compte créé', accountCreatedMsg: 'Bienvenue à Trust Global Bank ! Votre compte a été créé et votre KYC est en attente de révision.', completeRegistration: 'Terminer l\'inscription', personalIdentity: 'Identité personnelle', step1of3: 'Étape 1 sur 3', fullLegalName: 'Nom légal complet', namePlaceholder: 'Tel qu\'indiqué sur votre pièce d\'identité', countryLabel: 'Pays', continueToDocs: 'Continuer vers les documents', docVerification: 'Vérification des documents', step2of3: 'Étape 2 sur 3', passport: 'Passeport', idCard: 'Carte d\'identité', driverLicense: 'Permis de conduire', residencePermit: 'Permis de résidence', uploadPhoto: 'Télécharger la photo du document', maxSizeNote: 'Taille max : 5 Mo (JPG, PNG)', continueToBio: 'Continuer vers la biométrie', bioCheck: 'Vérification de la vivacité biométrique', bioNote: 'Positionnez votre visage dans le cadre et assurez un bon éclairage.', kycSubmittedTitle: 'KYC soumis', kycSubmittedMsg: 'Votre vérification d\'identité est en cours de traitement. Cela prend généralement 5 à 10 minutes.', startScan: 'Démarrer le scan', connectedBalance: 'Solde connecté', fiatValue: 'Valeur Fiat', viewStatement: 'Voir le relevé bancaire', instantRemittance: 'Remise instantanée', visitWebsite: 'Visiter le site officiel', currencyLabel: 'Devise', amountLabel: 'Montant', recipientLabel: 'UID du destinataire ou adresse du portefeuille', descriptionLabel: 'Description', recipientPlaceholder: 'UID utilisateur ou adresse G...', notePlaceholder: 'Note', internalTransferNote: 'Note : Il s\'agit d\'un transfert interne TGB. Pour payer via la blockchain Pi, utilisez l\'application Pi Wallet.', availableBalance: 'Solde disponible', ptgTrade: 'Intégration PTG Trade', ptgContracts: 'Contrats PTG', issueLC: 'Émettre une lettre de crédit', verifyDocs: 'Vérifier les documents', releaseFunds: 'Libérer les fonds', contractId: 'ID du contrat', ptgStatus: 'Statut PTG', lcStatus: 'Statut L/C', auditLog: 'Journal d\'audit', noContracts: 'Aucun contrat PTG trouvé.', createContract: 'Simuler un contrat PTG', buyer: 'Acheteur', seller: 'Vendeur'
     },
     es: { balance: 'Cartera Total', actions: 'Acciones Rápidas', market: 'Mercado', activity: 'Accividad Reciente', deposit: 'Depósito', withdraw: 'Retiro', transfer: 'Transferencia', shop: 'Tienda', card: 'Solicitar Tarjeta Visa', profile: 'Perfil', store: 'Tienda', copyUid: 'Copiar UID', uidCopied: '¡UID Copiado!', exchange: 'Intercambio Global', exchangeHistory: 'Historial de intercambios', buyPi: 'Comprar Pi', sellPi: 'Vender Pi', kyc: 'Verificación KYC', kycRequired: 'KYC requerido', kycPending: 'KYC pendiente', kycVerified: 'KYC verificado', connectedExchanges: 'Intercambios y Billeteras', globalConnectivity: 'Conectividad Global', connected: 'Conectado', disconnected: 'Desconectado', networkStatus: 'Estado de la Red', mainnetSettlement: 'Liquidación Mainnet', instant: 'Instantáneo', finance: 'Finanzas', lending: 'Préstamos P2P', pools: 'Fondos de Inversión', vault: 'Bóveda Personal', partnership: 'Asociación Comercial', scanQr: 'Escanear QR', metrics: 'Métricas Globales Pi', totalSupply: 'Suministro Total', circulatingSupply: 'Suministro Circulante', lockedSupply: 'Suministro Bloqueado', activeCountries: 'Países Activos', connectedBanks: 'Bancos Conectados', exchangeRates: 'Tasas de Cambio Globales', remittance: 'Remesas Globales', gcvValue: 'Valor de Consenso (GCV)', createLending: 'Crear Solicitud de Préstamo', loanAmount: 'Monto del Préstamo (π)', loanApr: 'Tasa de Interés (APR %)', loanPurpose: 'Propósito del Préstamo', addBank: 'Agregar Banco Global', executeLoan: 'Ejecutar Préstamo', joinPool: 'Unirse al Grupo', stakePi: 'Staker Pi para Subir Rango', submitProposal: 'Enviar Propuesta', comingSoon: 'Próximamente', copy: 'Copiar', copied: 'Copiado', logout: 'Cerrar Sesión', settings: 'Ajustes', privacy: 'Privacidad', language: 'Idioma', bankDetails: 'Detalles Bancarios', bankName: 'Nombre del Banco', accountNumber: 'Número de Cuenta', swiftCode: 'Código SWIFT/BIC', stakeAmount: 'Monto de Stake', stakeDuration: 'Duración (Meses)', joinPoolConfirm: 'Unirse al Fondo de Inversión', poolContribution: 'Contribución (π)', confirm: 'Confirmar', cancel: 'Cancelar',
-      insufficientFunds: 'Fondos insuficientes en su billetera TGB', invalidAmount: 'Monto inválido', invalidAmountMsg: 'Por favor, ingrese un monto mayor a 0.', confirmAction: 'Confirmar', walletQr: 'QR de su billetera', walletAddressLabel: 'Dirección de la billetera', addressCopied: '¡Dirección copiada!', scanQrNote: 'Escanee este código para recibir Pi al instante de cualquier Pioneer.', businessProposal: 'Propuesta comercial', partnershipNote: 'TrustBank Global busca socios estratégicos. Envíe su propuesta para integrar sus servicios.', companyName: 'Nombre de la empresa', companyPlaceholder: 'Ingrese el nombre de la empresa', proposalType: 'Tipo de propuesta', ecommerce: 'Integración de comercio electrónico', liquidity: 'Proveedor de liquidez', marketing: 'Asociación de marketing', other: 'Otro', messageLabel: 'Mensaje', messagePlaceholder: 'Describa su propuesta...', copyPassphrase: 'Copiar frase de contraseña', back: 'Atrás', finalConfirmation: 'Confirmación final', confirmRegistration: 'Confirmar registro', finalStep: 'Paso final', nameLabel: 'Nombre', dobLabel: 'Fecha de nacimiento', docTypeLabel: 'Tipo de documento', walletReady: 'Billetera lista', accountCreatedTitle: 'Cuenta creada', accountCreatedMsg: '¡Bienvenido a Trust Global Bank! Su cuenta ha sido creada y su KYC está pendiente de revisión.', completeRegistration: 'Completar registro', personalIdentity: 'Identidad personal', step1of3: 'Paso 1 de 3', fullLegalName: 'Nombre legal completo', namePlaceholder: 'Como aparece en su identificación', countryLabel: 'País', continueToDocs: 'Continuar a documentos', docVerification: 'Verificación de documentos', step2of3: 'Paso 2 de 3', passport: 'Pasaporte', idCard: 'Tarjeta de identificación', driverLicense: 'Licencia de conducir', residencePermit: 'Permiso de residencia', uploadPhoto: 'Subir foto del documento', maxSizeNote: 'Tamaño máx.: 5MB (JPG, PNG)', continueToBio: 'Continuar a biometría', bioCheck: 'Verificación de vitalidad biométrica', bioNote: 'Posicione su rostro dentro del marco y asegure una buena iluminación.', kycSubmittedTitle: 'KYC enviado', kycSubmittedMsg: 'Su verificación de identidad está siendo procesada. Esto suele tardar entre 5 y 10 minutos.', startScan: 'Iniciar escaneo', connectedBalance: 'Saldo conectado', fiatValue: 'Valor Fiat', viewStatement: 'Ver estado de cuenta', instantRemittance: 'Remesa instantánea', visitWebsite: 'Visitar sitio web oficial', currencyLabel: 'Moneda', amountLabel: 'Monto', recipientLabel: 'UID del destinatario o dirección de billetera', descriptionLabel: 'Descripción', recipientPlaceholder: 'UID de usuario o dirección G...', notePlaceholder: 'Nota', internalTransferNote: 'Nota: Esta es una transferencia interna de TGB. Para pagar a través de Pi Blockchain, use la aplicación Pi Wallet.', availableBalance: 'Saldo disponible'
+      insufficientFunds: 'Fondos insuficientes en su billetera TGB', invalidAmount: 'Monto inválido', invalidAmountMsg: 'Por favor, ingrese un monto mayor a 0.', confirmAction: 'Confirmar', walletQr: 'QR de su billetera', walletAddressLabel: 'Dirección de la billetera', addressCopied: '¡Dirección copiada!', scanQrNote: 'Escanee este código para recibir Pi al instante de cualquier Pioneer.', businessProposal: 'Propuesta comercial', partnershipNote: 'TrustBank Global busca socios estratégicos. Envíe su propuesta para integrar sus servicios.', companyName: 'Nombre de la empresa', companyPlaceholder: 'Ingrese el nombre de la empresa', proposalType: 'Tipo de propuesta', ecommerce: 'Integración de comercio electrónico', liquidity: 'Proveedor de liquidez', marketing: 'Asociación de marketing', other: 'Otro', messageLabel: 'Mensaje', messagePlaceholder: 'Describa su propuesta...', copyPassphrase: 'Copiar frase de contraseña', back: 'Atrás', finalConfirmation: 'Confirmación final', confirmRegistration: 'Confirmar registro', finalStep: 'Paso final', nameLabel: 'Nombre', dobLabel: 'Fecha de nacimiento', docTypeLabel: 'Tipo de documento', walletReady: 'Billetera lista', accountCreatedTitle: 'Cuenta creada', accountCreatedMsg: '¡Bienvenido a Trust Global Bank! Su cuenta ha sido creada y su KYC está pendiente de revisión.', completeRegistration: 'Completar registro', personalIdentity: 'Identidad personal', step1of3: 'Paso 1 de 3', fullLegalName: 'Nombre legal completo', namePlaceholder: 'Como aparece en su identificación', countryLabel: 'País', continueToDocs: 'Continuar a documentos', docVerification: 'Verificación de documentos', step2of3: 'Paso 2 de 3', passport: 'Pasaporte', idCard: 'Tarjeta de identificación', driverLicense: 'Licencia de conducir', residencePermit: 'Permiso de residencia', uploadPhoto: 'Subir foto del documento', maxSizeNote: 'Tamaño máx.: 5MB (JPG, PNG)', continueToBio: 'Continuar a biometría', bioCheck: 'Verificación de vitalidad biométrica', bioNote: 'Posicione su rostro dentro del marco y asegure una buena iluminación.', kycSubmittedTitle: 'KYC enviado', kycSubmittedMsg: 'Su verificación de identidad está siendo procesada. Esto suele tardar entre 5 y 10 minutos.', startScan: 'Iniciar escaneo', connectedBalance: 'Saldo conectado', fiatValue: 'Valor Fiat', viewStatement: 'Ver estado de cuenta', instantRemittance: 'Remesa instantánea', visitWebsite: 'Visitar sitio web oficial', currencyLabel: 'Moneda', amountLabel: 'Monto', recipientLabel: 'UID del destinatario o dirección de billetera', descriptionLabel: 'Descripción', recipientPlaceholder: 'UID de usuario o dirección G...', notePlaceholder: 'Nota', internalTransferNote: 'Nota: Esta es una transferencia interna de TGB. Para pagar a través de Pi Blockchain, use la aplicación Pi Wallet.', availableBalance: 'Saldo disponible', ptgTrade: 'Integración PTG Trade', ptgContracts: 'Contratos PTG', issueLC: 'Emitir carta de crédito', verifyDocs: 'Verificar documentos', releaseFunds: 'Liberar fondos', contractId: 'ID del contrato', ptgStatus: 'Estado PTG', lcStatus: 'Estado L/C', auditLog: 'Registro de auditoría', noContracts: 'No se encontraron contratos PTG.', createContract: 'Simular contrato PTG', buyer: 'Comprador', seller: 'Vendedor'
     },
     kab: { balance: 'Agraw n tqarict', actions: 'Tigawt n tazzla', market: 'Anadi n ssuq', activity: 'Tigawt taneggarut', deposit: 'Asers', withdraw: 'Asufeg', transfer: 'Asiwel', shop: 'Amsawaq', card: 'Suter tkarict Visa', profile: 'Udem', store: 'Tahanut', copyUid: 'Nsek UID', uidCopied: 'UID yensek!', exchange: 'Amsel n GCV', exchangeHistory: 'Amazray n ubeddel', buyPi: 'Aɣ Pi', sellPi: 'Zenz Pi', kyc: 'Aselmed n udem', kycRequired: 'Aselmed n udem yettusuter', kycPending: 'Aselmed n udem deg uraju', kycVerified: 'Aselmed n udem yettuseqbel', connectedExchanges: 'Imsel d tqaricin', globalConnectivity: 'Tuqqna tamadlant', connected: 'Yeqqen', disconnected: 'Ur yeqqin ara', networkStatus: 'Addad n uzeṭṭa', mainnetSettlement: 'Aseɣti n Mainnet', instant: 'Imiren', finance: 'Tadamsa', lending: 'Areṭṭal P2P', pools: 'Imsel n usfari', vault: 'Asenduq n udem', partnership: 'Tiddukla n tnezzut', scanQr: 'Nsek QR', metrics: 'Iseknan n Pi', totalSupply: 'Agraw amatu', circulatingSupply: 'Agraw yettazzalen', lockedSupply: 'Agraw yeqqnen', activeCountries: 'Timura n tigawt', connectedBanks: 'Ibanken yeqqnen', exchangeRates: 'Azal n ubeddel', remittance: 'Asiwel n tedrimt', gcvValue: 'Azal n GCV', createLending: 'Suter areṭṭal', loanAmount: 'Azal n ureṭṭal (π)', loanApr: 'Azal n lfayda (APR %)', loanPurpose: 'I wacu ureṭṭal', addBank: 'Rnu lbank amadlan', executeLoan: 'Smed areṭṭal', joinPool: 'Ddu ɣer ugraw', stakePi: 'Sers Pi i tmerniwt', submitProposal: 'Azen asenfar', comingSoon: 'Qrib ad d-yas', copy: 'Nsek', copied: 'Yensek', logout: 'Asufeg', settings: 'Iseɣtiyen', privacy: 'Tabaḍnit', language: 'Tutlayt', bankDetails: 'Talɣut n lbank', bankName: 'Isem n lbank', accountNumber: 'Uṭṭun n uselmed', swiftCode: 'SWIFT/BIC', stakeAmount: 'Azal n users', stakeDuration: 'Tanzagt (Agguren)', joinPoolConfirm: 'Ddu ɣer ugraw n usfari', poolContribution: 'Asiwel (π)', confirm: 'Sentem', cancel: 'Sefsex' },
     ko: { balance: '총 포트폴리오', actions: '빠른 작업', market: '시장 인사이트', activity: '최근 활동', deposit: '입금', withdraw: '출금', transfer: '송금', shop: '쇼핑', card: '비자 카드 요청', profile: '프로필', store: '상점', copyUid: 'UID 복사', uidCopied: 'UID 복사됨!', exchange: '글로벌 거래소', exchangeHistory: '환전 내역', buyPi: 'Pi 구매', sellPi: 'Pi 판매', kyc: 'KYC 인증', kycRequired: 'KYC 필요', kycPending: 'KYC 검토 중', kycVerified: 'KYC 인증됨', connectedExchanges: '연결된 거래소', globalConnectivity: '글로벌 연결성', connected: '연결됨', disconnected: '연결 끊김', networkStatus: '네트워크 상태', mainnetSettlement: '메인넷 결제', instant: '즉시', finance: '금융', lending: 'P2P 대출', pools: '투자 풀', vault: '개인 금고', partnership: '비즈니스 파트너십', scanQr: 'QR 스캔', metrics: '글로벌 Pi 지표', totalSupply: '총 공급량', circulatingSupply: '유통 공급량', lockedSupply: '잠긴 공급량', activeCountries: '활성 국가', connectedBanks: '연결된 은행', exchangeRates: '글로벌 환율', remittance: '글로벌 송금', gcvValue: '합의 가치 (GCV)', createLending: '대출 요청 생성', loanAmount: '대출 금액 (π)', loanApr: '이자율 (APR %)', loanPurpose: '대출 목적', addBank: '글로벌 은행 추가', executeLoan: '대출 실행', joinPool: '그룹 가입', stakePi: 'Pi 스테이킹', submitProposal: '제안서 제출', comingSoon: '곧 출시 예정', copy: '복사', copied: '복사됨', logout: '로그아웃', settings: '설정', privacy: '개인정보 보호', language: '언어', bankDetails: '은행 상세 정보', bankName: '은행 이름', accountNumber: '계좌 번호', swiftCode: 'SWIFT/BIC', stakeAmount: '스테이킹 금액', stakeDuration: '기간 (개월)', joinPoolConfirm: '투자 풀 가입', poolContribution: '기여도 (π)', confirm: '확인', cancel: '취소' },
@@ -1161,6 +1221,148 @@ function AppContent() {
   const handleExecuteLoan = (loan: any) => {
     setSelectedLoan(loan);
     setActiveModal('executeLoan');
+  };
+
+  const handleCreatePTGContract = async (amount: number, sellerUid: string) => {
+    if (!user) return;
+    setTxLoading(true);
+    try {
+      const contractRef = await addDoc(collection(db, 'contracts'), {
+        ptgId: "PTG-" + Math.random().toString(36).substring(7).toUpperCase(),
+        buyerUid: user.uid,
+        sellerUid,
+        amount,
+        currency: 'pi',
+        status: 'active',
+        createdAt: serverTimestamp()
+      });
+
+      // Audit Log
+      await addDoc(collection(db, 'audit_logs'), {
+        relatedId: contractRef.id,
+        action: 'CONTRACT_CREATED',
+        details: `PTG Contract created for ${amount} PI. Requesting L/C from TGB.`,
+        timestamp: serverTimestamp()
+      });
+
+      // Automatically trigger L/C request simulation
+      await handleIssueLC(contractRef.id, amount, user.uid, sellerUid);
+
+      setTxSuccess(true);
+      setTimeout(() => {
+        setTxSuccess(false);
+        setActiveModal(null);
+      }, 2000);
+    } catch (e: any) {
+      setNotification({ title: 'Error', message: e.message });
+      setActiveModal('notification');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleIssueLC = async (contractId: string, amount: number, applicantUid: string, beneficiaryUid: string) => {
+    try {
+      const lcRef = await addDoc(collection(db, 'letters_of_credit'), {
+        contractId,
+        issuerUid: 'TGB-SYSTEM',
+        applicantUid,
+        beneficiaryUid,
+        amount,
+        status: 'issued',
+        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        createdAt: serverTimestamp()
+      });
+
+      // Update contract with LC ID
+      await updateDoc(doc(db, 'contracts', contractId), {
+        lcId: lcRef.id
+      });
+
+      // Audit Log
+      await addDoc(collection(db, 'audit_logs'), {
+        relatedId: lcRef.id,
+        action: 'LC_ISSUED',
+        details: `TGB issued Letter of Credit for Contract ${contractId}.`,
+        timestamp: serverTimestamp()
+      });
+    } catch (e: any) {
+      console.error("LC Issuance error:", e);
+    }
+  };
+
+  const handleVerifyDocs = async (lcId: string) => {
+    try {
+      await updateDoc(doc(db, 'letters_of_credit', lcId), {
+        status: 'docs_verified'
+      });
+
+      // Audit Log
+      await addDoc(collection(db, 'audit_logs'), {
+        relatedId: lcId,
+        action: 'DOCS_VERIFIED',
+        details: `TGB verified trade documents for L/C ${lcId}.`,
+        timestamp: serverTimestamp()
+      });
+    } catch (e: any) {
+      console.error("Doc verification error:", e);
+    }
+  };
+
+  const handleReleaseFunds = async (lcId: string, contractId: string, amount: number, beneficiaryUid: string) => {
+    if (!user || !wallet) return;
+    setTxLoading(true);
+    try {
+      // 1. Update LC status
+      await updateDoc(doc(db, 'letters_of_credit', lcId), {
+        status: 'paid'
+      });
+
+      // 2. Update Contract status
+      await updateDoc(doc(db, 'contracts', contractId), {
+        status: 'completed'
+      });
+
+      // 3. Transfer funds (TGB Internal)
+      const buyerWalletRef = doc(db, 'wallets', user.uid);
+      const sellerWalletRef = doc(db, 'wallets', beneficiaryUid);
+
+      await updateDoc(buyerWalletRef, {
+        'balances.PI': increment(-amount)
+      });
+      await updateDoc(sellerWalletRef, {
+        'balances.PI': increment(amount)
+      });
+
+      // 4. Add Transaction
+      await addDoc(collection(db, 'transactions'), {
+        uid: user.uid,
+        type: 'transfer',
+        amount: -amount,
+        currency: 'PI',
+        description: `PTG Contract ${contractId} Payment`,
+        sender: user.uid,
+        receiver: beneficiaryUid,
+        timestamp: serverTimestamp(),
+        status: 'completed'
+      });
+
+      // 5. Audit Log
+      await addDoc(collection(db, 'audit_logs'), {
+        relatedId: lcId,
+        action: 'FUNDS_RELEASED',
+        details: `Funds released for L/C ${lcId}. Contract ${contractId} completed.`,
+        timestamp: serverTimestamp()
+      });
+
+      setTxSuccess(true);
+      setTimeout(() => setTxSuccess(false), 2000);
+    } catch (e: any) {
+      setNotification({ title: 'Error', message: e.message });
+      setActiveModal('notification');
+    } finally {
+      setTxLoading(false);
+    }
   };
 
   const confirmExecuteLoan = async () => {
@@ -2558,6 +2760,39 @@ function AppContent() {
               </div>
             </div>
 
+            {/* PTG Trade Integration */}
+            <div className="bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 space-y-6 relative overflow-hidden group">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-indigo-500/5 rounded-full blur-3xl group-hover:bg-indigo-500/10 transition-colors" />
+              <div className="flex items-center space-x-3 relative z-10">
+                <div className="p-3 bg-indigo-500/10 rounded-2xl">
+                  <Globe className="w-6 h-6 text-indigo-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">{t.ptgTrade}</h3>
+                  <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest">Pioneer Trading Gateway Integration</p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 space-y-3 relative z-10">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400 uppercase">Active Contracts</span>
+                  <span className="text-xs font-black text-indigo-500">{contracts.length}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-400 uppercase">L/C Issued</span>
+                  <span className="text-xs font-black text-emerald-500">{lcs.filter(l => l.status === 'issued').length}</span>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setActiveModal('ptgTrade')}
+                className="w-full py-4 bg-indigo-500 text-white font-bold rounded-2xl hover:bg-indigo-600 transition-all shadow-xl shadow-indigo-500/20 active:scale-95 flex items-center justify-center space-x-2 relative z-10"
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                <span>{t.ptgContracts}</span>
+              </button>
+            </div>
+
             {/* Pending Applications */}
             <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-3xl p-6 space-y-4">
               <div className="flex items-center justify-between">
@@ -3871,6 +4106,110 @@ function AppContent() {
                 </div>
               </motion.div>
             )}
+          </div>
+        ) : activeModal === 'ptgTrade' ? (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <h3 className="text-xl font-bold flex items-center space-x-2">
+                <LayoutDashboard className="w-6 h-6 text-indigo-500" />
+                <span>{t.ptgContracts}</span>
+              </h3>
+              <button 
+                onClick={() => handleCreatePTGContract(100, 'TGB-SELLER-SIM')}
+                className="px-4 py-2 bg-indigo-500/10 text-indigo-500 border border-indigo-500/20 rounded-xl text-xs font-bold hover:bg-indigo-500/20 transition-all flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>{t.createContract}</span>
+              </button>
+            </div>
+
+            <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              {contracts.length > 0 ? (
+                contracts.map(contract => {
+                  const lc = lcs.find(l => l.contractId === contract.id);
+                  return (
+                    <div key={contract.id} className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 relative overflow-hidden">
+                      <div className="flex justify-between items-start">
+                        <div className="space-y-1">
+                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t.contractId}</p>
+                          <p className="font-mono text-xs text-indigo-400">{contract.ptgId}</p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                          contract.status === 'completed' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20'
+                        }`}>
+                          {contract.status}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800">
+                          <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">{t.buyer}</p>
+                          <p className="text-[10px] font-bold truncate">{contract.buyerUid}</p>
+                        </div>
+                        <div className="p-3 bg-slate-950 rounded-2xl border border-slate-800">
+                          <p className="text-[8px] font-bold text-slate-500 uppercase mb-1">{t.seller}</p>
+                          <p className="text-[10px] font-bold truncate">{contract.sellerUid}</p>
+                        </div>
+                      </div>
+
+                      {lc && (
+                        <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 space-y-3">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center space-x-2">
+                              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                              <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-500">Letter of Credit</span>
+                            </div>
+                            <span className="text-[10px] font-black text-emerald-500 uppercase">{lc.status}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-slate-500 uppercase font-bold">Amount</span>
+                            <span className="text-sm font-black text-white">{lc.amount} PI</span>
+                          </div>
+                          
+                          {lc.status === 'issued' && (
+                            <button 
+                              onClick={() => handleVerifyDocs(lc.id)}
+                              className="w-full py-2 bg-emerald-500 text-slate-950 text-[10px] font-black rounded-xl hover:bg-emerald-600 transition-all uppercase tracking-widest"
+                            >
+                              {t.verifyDocs}
+                            </button>
+                          )}
+                          
+                          {lc.status === 'docs_verified' && (
+                            <button 
+                              onClick={() => handleReleaseFunds(lc.id, contract.id, lc.amount, lc.beneficiaryUid)}
+                              className="w-full py-2 bg-amber-500 text-slate-950 text-[10px] font-black rounded-xl hover:bg-amber-600 transition-all uppercase tracking-widest"
+                            >
+                              {t.releaseFunds}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="pt-4 border-t border-slate-800">
+                        <p className="text-[8px] font-bold text-slate-600 uppercase mb-2 tracking-widest">Audit Log</p>
+                        <div className="space-y-2">
+                          {auditLogs.filter(log => log.relatedId === contract.id || log.relatedId === contract.lcId).map(log => (
+                            <div key={log.id} className="flex items-start space-x-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-slate-700 mt-1" />
+                              <div className="flex-1">
+                                <p className="text-[9px] text-slate-400 leading-tight">{log.details}</p>
+                                <p className="text-[7px] text-slate-600 uppercase font-bold">{log.action}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="text-center py-12 bg-slate-900/50 rounded-[2.5rem] border border-dashed border-slate-800 space-y-4">
+                  <Globe className="w-12 h-12 text-slate-700 mx-auto" />
+                  <p className="text-slate-500 font-bold">{t.noContracts}</p>
+                </div>
+              )}
+            </div>
           </div>
         ) : activeModal === 'kyc' ? (
           <div className="space-y-6">

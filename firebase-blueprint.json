@@ -161,6 +161,53 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["companyName", "email", "proposalType", "content"]
+    },
+    "Contract": {
+      "title": "PTG Contract",
+      "description": "A trade contract from Pioneer Trade Group",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ptgId": { "type": "string", "description": "Original ID from PTG platform" },
+        "buyerUid": { "type": "string" },
+        "sellerUid": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "enum": ["pi", "usd"] },
+        "status": { "type": "string", "enum": ["draft", "active", "completed", "cancelled"] },
+        "lcId": { "type": "string", "description": "Linked Letter of Credit ID in TGB" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ptgId", "buyerUid", "sellerUid", "amount", "status"]
+    },
+    "LetterOfCredit": {
+      "title": "Letter of Credit",
+      "description": "A financial instrument issued by TGB for a PTG contract",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "contractId": { "type": "string", "description": "Linked PTG Contract ID" },
+        "issuerUid": { "type": "string", "description": "TGB Admin or System UID" },
+        "applicantUid": { "type": "string", "description": "Buyer UID" },
+        "beneficiaryUid": { "type": "string", "description": "Seller UID" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["issued", "docs_received", "docs_verified", "paid", "cancelled"] },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["contractId", "applicantUid", "beneficiaryUid", "amount", "status"]
+    },
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Financial audit trail for PTG-TGB integration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "relatedId": { "type": "string", "description": "ID of related Contract or L/C" },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["relatedId", "action", "timestamp"]
     }
   },
   "firestore": {
@@ -203,6 +250,18 @@
     "/partnerships/{partnershipId}": {
       "schema": "Partnership",
       "description": "Partnership proposals"
+    },
+    "/contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "PTG Trade Contracts"
+    },
+    "/letters_of_credit/{lcId}": {
+      "schema": "LetterOfCredit",
+      "description": "TGB Letters of Credit"
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Integration audit logs"
     }
   }
 }
