@@ -54,6 +54,7 @@ import {
   AreaChart,
   Area
 } from 'recharts';
+import axios from 'axios';
 import { 
   auth, 
   db, 
@@ -720,6 +721,7 @@ interface Product {
 
 function AppContent() {
   const { user, userData, wallet, transactions, cards, stakes, contracts, lcs, auditLogs, loading: authLoading, error: authError, loginWithGoogle, loginWithPi, loginAsGuest, logout, setWallet, setTransactions } = useAuth();
+  const totalPiBalance = Number(wallet?.balances?.['PI'] || 0);
   const { prices, loading: pricesLoading } = useBinancePrices();
   const [exchangeRates, setExchangeRates] = useState({ usd_dzd: 134.5 });
   const [loginWalletAddress, setLoginWalletAddress] = useState('');
@@ -836,7 +838,7 @@ function AppContent() {
         
         if (bankTransferFrom === 'TGB') {
           // Transfer from TGB to Bank
-          if (wallet.balances['PI'] < amount) {
+          if (totalPiBalance < amount) {
             console.error("Insufficient TGB balance");
             setBankTransferLoading(false);
             return;
@@ -1224,29 +1226,55 @@ function AppContent() {
   };
 
   const handleCreatePTGContract = async (amount: number, sellerUid: string) => {
-    if (!user) return;
+    if (!user || !wallet) return;
+    
+    if (totalPiBalance < amount) {
+      setNotification({ title: 'Insufficient Funds', message: `You need ${amount} PI to secure this contract.` });
+      setActiveModal('notification');
+      return;
+    }
+
     setTxLoading(true);
     try {
+      // 1. Deduct/Freeze funds
+      await updateDoc(doc(db, 'wallets', user.uid), {
+        'balances.PI': increment(-amount),
+        lastUpdated: serverTimestamp()
+      });
+
+      // 2. Create Contract
       const contractRef = await addDoc(collection(db, 'contracts'), {
         ptgId: "PTG-" + Math.random().toString(36).substring(7).toUpperCase(),
         buyerUid: user.uid,
         sellerUid,
         amount,
         currency: 'pi',
-        status: 'active',
+        status: 'funds_secured',
         createdAt: serverTimestamp()
       });
 
-      // Audit Log
+      // 3. Audit Log
       await addDoc(collection(db, 'audit_logs'), {
         relatedId: contractRef.id,
-        action: 'CONTRACT_CREATED',
-        details: `PTG Contract created for ${amount} PI. Requesting L/C from TGB.`,
+        action: 'FUNDS_SECURED',
+        details: `PTG Contract created and ${amount} PI secured in TGB escrow.`,
         timestamp: serverTimestamp()
       });
 
-      // Automatically trigger L/C request simulation
+      // 4. Issue LC
       await handleIssueLC(contractRef.id, amount, user.uid, sellerUid);
+
+      // 5. Notify PTG Platform
+      try {
+        await axios.post('http://localhost:5000/api/notify-funding', {
+          contractId: contractRef.id,
+          status: 'Secured',
+          amount: amount,
+          bank: 'TGB'
+        });
+      } catch (axiosErr) {
+        console.warn("PTG Platform notification failed (is server running on :5000?):", axiosErr);
+      }
 
       setTxSuccess(true);
       setTimeout(() => {
@@ -1367,7 +1395,7 @@ function AppContent() {
 
   const confirmExecuteLoan = async () => {
     if (!user || !wallet || !selectedLoan) return;
-    if ((wallet.balances['PI'] || 0) < selectedLoan.amount) {
+    if (totalPiBalance < selectedLoan.amount) {
       setNotification({ title: 'Error', message: "Insufficient PI balance to fund this loan" });
       setActiveModal('notification');
       return;
@@ -1526,8 +1554,7 @@ function AppContent() {
     }
 
     // Fallback for non-Pi browser or guest mode
-    const currentPiBalance = wallet.balances['PI'] || 0;
-    if (currentPiBalance < product.price) {
+    if (totalPiBalance < product.price) {
       setNotification({ title: 'Error', message: "Insufficient Pi balance" });
       setActiveModal('notification');
       return;
@@ -1597,6 +1624,31 @@ function AppContent() {
         setTxSuccess(false);
         setActiveTab('profile');
       }, 2000);
+    } catch (e: any) {
+      setNotification({ title: 'Error', message: e.message });
+      setActiveModal('notification');
+    } finally {
+      setTxLoading(false);
+    }
+  };
+
+  const handleAddTestFunds = async () => {
+    if (!user) return;
+    setTxLoading(true);
+    try {
+      if (user.uid.startsWith('guest_')) {
+        setWallet(prev => prev ? {
+          ...prev,
+          balances: { ...prev.balances, PI: (Number(prev.balances['PI'] || 0) + 100) }
+        } : null);
+      } else {
+        await updateDoc(doc(db, 'wallets', user.uid), {
+          'balances.PI': increment(100),
+          lastUpdated: serverTimestamp()
+        });
+      }
+      setNotification({ title: 'Success', message: '100 Test PI added to your wallet.' });
+      setActiveModal('notification');
     } catch (e: any) {
       setNotification({ title: 'Error', message: e.message });
       setActiveModal('notification');
@@ -1921,7 +1973,8 @@ function AppContent() {
               </div>
               
               <button 
-                onClick={async () => {
+                onClick={async (e) => {
+                  e.preventDefault();
                   console.log("Pioneer Connection clicked", { loginWalletAddress, loginNickname });
                   const wallet = loginWalletAddress?.trim();
                   const nickname = loginNickname?.trim();
@@ -1937,12 +1990,47 @@ function AppContent() {
                     setActiveModal('notification');
                     return;
                   }
-                  await loginWithPi({ wallet, nickname });
+
+                  // Check if user exists before "connecting"
+                  setTxLoading(true);
+                  try {
+                    const usersRef = collection(db, 'users');
+                    const q = query(usersRef, where('displayName', '==', nickname), where('piWalletAddress', '==', wallet));
+                    const querySnapshot = await getDocs(q);
+                    
+                    if (querySnapshot.empty) {
+                      // Also check piUid for backward compatibility
+                      const q2 = query(usersRef, where('displayName', '==', nickname), where('piUid', '==', wallet));
+                      const querySnapshot2 = await getDocs(q2);
+                      
+                      if (querySnapshot2.empty) {
+                        setNotification({ 
+                          title: 'Account Not Found', 
+                          message: 'No account found with these details. If you are new, please use "Open New Account".' 
+                        });
+                        setActiveModal('notification');
+                        setTxLoading(false);
+                        return;
+                      }
+                    }
+                    
+                    await loginWithPi({ wallet, nickname });
+                  } catch (err: any) {
+                    setNotification({ title: 'Connection Error', message: err.message });
+                    setActiveModal('notification');
+                  } finally {
+                    setTxLoading(false);
+                  }
                 }} 
-                className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group"
+                disabled={txLoading}
+                className="w-full py-6 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xl rounded-2xl flex items-center justify-center space-x-3 transition-all shadow-xl shadow-amber-500/20 active:scale-95 group disabled:opacity-50"
               >
-                <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
-                <span>{t.pioneerConnection}</span>
+                {txLoading ? <Loader2 className="w-6 h-6 animate-spin" /> : (
+                  <>
+                    <Globe className="w-6 h-6 group-hover:rotate-180 transition-transform duration-700" />
+                    <span>{t.pioneerConnection}</span>
+                  </>
+                )}
               </button>
 
               <div className="flex items-center space-x-4">
@@ -2019,7 +2107,7 @@ function AppContent() {
           onClose={() => setActiveModal(null)} 
           title={activeModal === 'notification' ? notification.title : activeModal === 'language' ? 'Select Language' : 'Notification'}
         >
-          {activeModal === 'notification' && (
+          {(activeModal === 'notification' && notification.message) && (
             <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
               <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center">
                 <AlertCircle className="w-10 h-10 text-amber-500" />
@@ -3344,7 +3432,9 @@ function AppContent() {
                         <p className="text-xs text-slate-400 leading-relaxed">To access high-limit GCV exchange and global remittances, you must complete your identity verification.</p>
                       </div>
                       <button 
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
                           setKycStep(1);
                           setActiveModal('kyc');
                         }}
@@ -3462,7 +3552,9 @@ function AppContent() {
 
                   {userData?.kycStatus !== 'verified' && (
                     <button 
-                      onClick={() => {
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                         setKycStep(1);
                         setActiveModal('kyc');
                       }}
@@ -3485,6 +3577,24 @@ function AppContent() {
                   </button>
                 </div>
               </div>
+
+              <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800 space-y-4">
+                <h3 className="font-bold flex items-center space-x-2">
+                  <Calculator className="w-5 h-5 text-indigo-500" />
+                  <span>Developer Options</span>
+                </h3>
+                <div className="p-4 bg-slate-950 border border-slate-800 rounded-2xl space-y-4">
+                  <p className="text-xs text-slate-500 leading-relaxed">Use these tools to test financial integrations and PTG trade flows.</p>
+                  <button 
+                    onClick={handleAddTestFunds}
+                    disabled={txLoading}
+                    className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all active:scale-95 flex items-center justify-center space-x-2 shadow-lg shadow-indigo-500/20"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add 100 Test PI</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </section>
         )}
@@ -3497,7 +3607,7 @@ function AppContent() {
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center"><CheckCircle2 className="w-12 h-12 text-emerald-500" /></motion.div>
             <p className="text-xl font-bold">Action Successful</p>
           </div>
-        ) : activeModal === 'notification' ? (
+        ) : (activeModal === 'notification' && notification.message) ? (
           <div className="flex flex-col items-center justify-center py-8 space-y-6 text-center">
             <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center">
               <AlertCircle className="w-10 h-10 text-amber-500" />
@@ -3648,7 +3758,7 @@ function AppContent() {
             </div>
 
             <button 
-              disabled={txLoading || stakeAmount <= 0 || (wallet?.balances['PI'] || 0) < stakeAmount}
+              disabled={txLoading || stakeAmount <= 0 || totalPiBalance < stakeAmount}
               onClick={async () => {
                 if (!user || !wallet) return;
                 setTxLoading(true);
@@ -3709,7 +3819,7 @@ function AppContent() {
                   onClick={async () => {
                     if (!user || !wallet) return;
                     const amount = parseFloat((document.getElementById('poolAmount') as HTMLInputElement).value);
-                    if (amount > 0 && (wallet.balances['PI'] || 0) >= amount) {
+                    if (amount > 0 && totalPiBalance >= amount) {
                       setTxLoading(true);
                       try {
                         await updateDoc(doc(db, 'wallets', user.uid), { 'balances.PI': increment(-amount) });
@@ -3789,7 +3899,7 @@ function AppContent() {
                         'balances.USDT': increment(-(amount * (prices['PI'] || 314159)))
                       });
                     } else {
-                      if ((wallet.balances['PI'] || 0) >= amount) {
+                      if (totalPiBalance >= amount) {
                         await updateDoc(doc(db, 'wallets', user.uid), { 
                           'balances.PI': increment(-amount),
                           'balances.USDT': increment(amount * (prices['PI'] || 314159))
